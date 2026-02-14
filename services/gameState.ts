@@ -1,13 +1,17 @@
 import { BESTIARY_DATA, WEAPONS, INITIAL_PLAYER_STATS, GITHUB_ASSET_BASE_URL } from '../constants';
 import { Creature, Weapon, PlayerConfig } from '../types';
+import { ASSET_REGISTRY } from '../game/asset_registry';
 
-// Bump to V7: Reset state to clear out old hardcoded GitHub RAW URLs
-const STORAGE_KEY = 'IMMORTALIS_GAME_STATE_V7';
+// Bump to V8: Add assetSourceMode
+const STORAGE_KEY = 'IMMORTALIS_GAME_STATE_V8';
+
+type AssetSourceMode = 'LOCAL' | 'GITHUB';
 
 class GameStateManager {
     private creatures: Creature[];
     private weapons: Weapon[];
     private playerConfig: PlayerConfig;
+    private assetSourceMode: AssetSourceMode;
 
     constructor() {
         // Try to load from LocalStorage
@@ -18,10 +22,12 @@ class GameStateManager {
                 const parsed = JSON.parse(savedState);
                 this.creatures = parsed.creatures || [...BESTIARY_DATA];
                 this.weapons = parsed.weapons || [...WEAPONS];
+                // Default to GITHUB if not explicit, assuming public repo
+                this.assetSourceMode = parsed.assetSourceMode || 'GITHUB'; 
                 
                 // Ensure player config has a valid sprite path (fallback to constant if missing/broken)
                 this.playerConfig = parsed.playerConfig || {
-                    spritePath: `assets/sprites/player/idle.png`,
+                    spritePath: ASSET_REGISTRY.PLAYER.IDLE,
                     baseStats: { ...INITIAL_PLAYER_STATS.attributes }
                 };
 
@@ -48,7 +54,7 @@ class GameStateManager {
                     w.spritePath = cleanup(w.spritePath);
                 });
 
-                console.log('IMMORTALIS: State loaded from LocalStorage (V7)');
+                console.log('IMMORTALIS: State loaded from LocalStorage (V8)');
             } catch (e) {
                 console.error('IMMORTALIS: Failed to parse save data, reverting to defaults', e);
                 this.resetToDefaults();
@@ -61,8 +67,9 @@ class GameStateManager {
     private resetToDefaults() {
         this.creatures = [...BESTIARY_DATA];
         this.weapons = [...WEAPONS];
+        this.assetSourceMode = 'GITHUB'; // Default to GITHUB (Public)
         this.playerConfig = {
-            spritePath: `assets/sprites/player/idle.png`,
+            spritePath: ASSET_REGISTRY.PLAYER.IDLE,
             baseStats: { ...INITIAL_PLAYER_STATS.attributes }
         };
     }
@@ -71,13 +78,23 @@ class GameStateManager {
         const state = {
             creatures: this.creatures,
             weapons: this.weapons,
-            playerConfig: this.playerConfig
+            playerConfig: this.playerConfig,
+            assetSourceMode: this.assetSourceMode
         };
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         } catch (e) {
             console.warn("IMMORTALIS: Storage Quota Exceeded. Assets might be too large.");
         }
+    }
+
+    // Settings
+    getAssetSourceMode() { return this.assetSourceMode; }
+    setAssetSourceMode(mode: AssetSourceMode) {
+        this.assetSourceMode = mode;
+        this.save();
+        // Force reload to apply constant changes effectively
+        window.location.reload(); 
     }
 
     // Creatures

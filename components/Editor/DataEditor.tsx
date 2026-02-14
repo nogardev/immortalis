@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gameState } from '../../services/gameState'; // Import GameState
 import { Creature, Weapon, PlayerConfig } from '../../types';
-import { GITHUB_ASSET_BASE_URL, IS_REPO_PUBLIC } from '../../constants';
+import { resolveAssetPath } from '../../constants';
+import { getAllRegisteredAssets } from '../../game/asset_registry';
 
 // --- MOCK ASSET FILE SYSTEM ---
 const INITIAL_ASSETS = {
@@ -41,6 +42,11 @@ interface AssetPickerProps {
 const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, onUpload, onClose, resolveUrl }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [customUrl, setCustomUrl] = useState('');
+    const [activeTab, setActiveTab] = useState<'REGISTERED' | 'UPLOAD'>('REGISTERED');
+    const isGithubMode = gameState.getAssetSourceMode() === 'GITHUB';
+
+    // Get assets from registry
+    const registeredAssets = getAllRegisteredAssets();
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -62,94 +68,129 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                     <div>
                         <h3 className="font-bold text-stone-200">Select {type === 'SPRITE' ? 'Sprite' : 'Illustration'} Asset</h3>
                         <div className="flex gap-2 items-center mt-1">
-                            <span className={`text-[9px] px-1.5 rounded uppercase font-bold border ${IS_REPO_PUBLIC ? 'border-blue-500 text-blue-400' : 'border-emerald-500 text-emerald-400'}`}>
-                                {IS_REPO_PUBLIC ? 'PUBLIC REPO MODE' : 'PRIVATE/LOCAL MODE'}
+                            <span className={`text-[9px] px-1.5 rounded uppercase font-bold border ${isGithubMode ? 'border-blue-500 text-blue-400' : 'border-emerald-500 text-emerald-400'}`}>
+                                {isGithubMode ? 'PUBLIC REPO MODE' : 'PRIVATE/LOCAL MODE'}
                             </span>
                         </div>
                     </div>
                     <button onClick={onClose} className="text-stone-400 hover:text-white px-2">✕</button>
                 </div>
-                
-                {/* External URL Input Section */}
-                <div className="p-4 bg-[#111] border-b border-stone-800 flex gap-2 items-center">
-                    <span className="text-xs font-bold text-stone-500 uppercase whitespace-nowrap">External URL:</span>
-                    <input 
-                        type="text" 
-                        value={customUrl}
-                        onChange={(e) => setCustomUrl(e.target.value)}
-                        placeholder="Paste link (Discord, Imgur, etc)"
-                        className="flex-1 bg-[#0a0a0a] border border-[#333] rounded px-3 py-1.5 text-xs text-stone-200 focus:border-emerald-500 focus:outline-none font-mono"
-                    />
+
+                {/* Tabs */}
+                <div className="flex border-b border-stone-800 bg-[#111]">
                     <button 
-                        onClick={handleCustomUrlSubmit}
-                        disabled={!customUrl}
-                        className="bg-stone-700 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors"
+                        onClick={() => setActiveTab('REGISTERED')}
+                        className={`px-4 py-2 text-xs font-bold ${activeTab === 'REGISTERED' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-stone-500'}`}
                     >
-                        USE URL
+                        FROM REGISTRY
+                    </button>
+                     <button 
+                        onClick={() => setActiveTab('UPLOAD')}
+                        className={`px-4 py-2 text-xs font-bold ${activeTab === 'UPLOAD' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-stone-500'}`}
+                    >
+                        MANUAL / UPLOAD
                     </button>
                 </div>
                 
-                <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept=".png,.jpg,.jpeg" 
-                    onChange={handleFileChange}
-                />
-
-                <div className="p-4 overflow-y-auto grid grid-cols-5 gap-4 flex-1 content-start">
-                    {/* Upload Button */}
-                    <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="group flex flex-col items-center gap-2 p-2 rounded bg-[#222] border-2 border-dashed border-stone-600 hover:border-emerald-500 hover:bg-[#2a2a2a] transition-all min-h-[120px] justify-center relative"
-                    >
-                        <div className="w-10 h-10 rounded-full bg-stone-800 flex items-center justify-center text-emerald-500 text-xl font-bold group-hover:scale-110 transition-transform">
-                            +
-                        </div>
-                        <span className="text-[10px] text-stone-400 font-bold uppercase text-center">
-                            Upload Local<br/>(Preview Only)
-                        </span>
-                         <div className="absolute top-1 right-1 bg-yellow-600 text-[8px] font-bold px-1 rounded text-black" title="Local only">
-                            LOCAL
-                        </div>
-                    </button>
-
-                    {/* Asset List */}
-                    {currentList.map((path, idx) => (
-                        <button 
-                            key={idx}
-                            onClick={() => { onSelect(path); onClose(); }}
-                            className="group flex flex-col items-center gap-2 p-2 rounded hover:bg-[#333] border border-transparent hover:border-emerald-500 transition-all relative"
-                        >
-                            <div className="w-24 h-24 bg-[#111] border border-stone-700 flex items-center justify-center overflow-hidden relative">
-                                <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
-                                <img 
-                                    src={resolveUrl(path)} 
-                                    alt="asset" 
-                                    onError={(e) => {
-                                         const target = e.target as HTMLImageElement;
-                                         // If it fails, show broken icon
-                                         target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM1NSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIj48L2NpcmNsZT48bGluZSB4MT0iMTIiIHkxPSI4IiB4Mj0iMTIiIHkyPSIxMiI+PC9saW5lPjxsaW5lIHgxPSIxMiIgeTE9IjE2IiB4Mj0iMTIuMDEiIHkyPSIxNiI+PC9saW5lPjwvc3ZnPg==';
-                                    }}
-                                    className="max-w-full max-h-full object-contain relative z-10 image-pixelated" 
-                                />
-                            </div>
-                            <span className="text-[10px] text-stone-400 break-all w-full text-center font-mono truncate px-1">
-                                {path.startsWith('data:') ? 'Local Asset' : (path.startsWith('http') ? 'External Link' : path.split('/').pop())}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-
-                {!IS_REPO_PUBLIC && (
-                    <div className="p-2 bg-emerald-900/20 border-t border-emerald-900/50 text-[10px] text-emerald-300 text-center font-mono">
-                       ✅ SYSTEM READY: Using local 'public/assets' pipeline.
-                    </div>
+                {activeTab === 'REGISTERED' && (
+                     <div className="p-4 bg-[#111] overflow-y-auto grid grid-cols-5 gap-4 flex-1 content-start">
+                         {registeredAssets.length === 0 && <div className="col-span-5 text-center text-stone-500 text-xs">No assets in asset_registry.ts</div>}
+                         {registeredAssets.map((path, idx) => (
+                             <button 
+                                key={idx}
+                                onClick={() => { onSelect(path); onClose(); }}
+                                className="group flex flex-col items-center gap-2 p-2 rounded hover:bg-[#333] border border-transparent hover:border-emerald-500 transition-all relative"
+                                title={resolveUrl(path)}
+                            >
+                                <div className="w-24 h-24 bg-[#111] border border-stone-700 flex items-center justify-center overflow-hidden relative">
+                                    <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
+                                    <img 
+                                        src={resolveUrl(path)} 
+                                        alt="asset" 
+                                        className="max-w-full max-h-full object-contain relative z-10 image-pixelated" 
+                                    />
+                                </div>
+                                <span className="text-[10px] text-stone-400 break-all w-full text-center font-mono truncate px-1">
+                                    {path.split('/').pop()}
+                                </span>
+                            </button>
+                         ))}
+                     </div>
                 )}
-                {IS_REPO_PUBLIC && (
-                    <div className="p-2 bg-orange-900/20 border-t border-orange-900/50 text-[10px] text-orange-300 text-center font-mono">
-                       ℹ️ PUBLIC MODE: Assets are loaded from GitHub Raw. Push your changes to 'main' to see them.
-                    </div>
+
+                {activeTab === 'UPLOAD' && (
+                    <>
+                        {/* External URL Input Section */}
+                        <div className="p-4 bg-[#111] border-b border-stone-800 flex gap-2 items-center">
+                            <span className="text-xs font-bold text-stone-500 uppercase whitespace-nowrap">External URL:</span>
+                            <input 
+                                type="text" 
+                                value={customUrl}
+                                onChange={(e) => setCustomUrl(e.target.value)}
+                                placeholder="Paste link (public/assets/...)"
+                                className="flex-1 bg-[#0a0a0a] border border-[#333] rounded px-3 py-1.5 text-xs text-stone-200 focus:border-emerald-500 focus:outline-none font-mono"
+                            />
+                            <button 
+                                onClick={handleCustomUrlSubmit}
+                                disabled={!customUrl}
+                                className="bg-stone-700 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors"
+                            >
+                                USE URL
+                            </button>
+                        </div>
+                        
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            accept=".png,.jpg,.jpeg" 
+                            onChange={handleFileChange}
+                        />
+
+                        <div className="p-4 overflow-y-auto grid grid-cols-5 gap-4 flex-1 content-start bg-[#111]">
+                            {/* Upload Button */}
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="group flex flex-col items-center gap-2 p-2 rounded bg-[#222] border-2 border-dashed border-stone-600 hover:border-emerald-500 hover:bg-[#2a2a2a] transition-all min-h-[120px] justify-center relative"
+                            >
+                                <div className="w-10 h-10 rounded-full bg-stone-800 flex items-center justify-center text-emerald-500 text-xl font-bold group-hover:scale-110 transition-transform">
+                                    +
+                                </div>
+                                <span className="text-[10px] text-stone-400 font-bold uppercase text-center">
+                                    Upload Local<br/>(Preview Only)
+                                </span>
+                                <div className="absolute top-1 right-1 bg-yellow-600 text-[8px] font-bold px-1 rounded text-black" title="Local only">
+                                    LOCAL
+                                </div>
+                            </button>
+
+                            {/* Legacy List */}
+                            {currentList.map((path, idx) => (
+                                <button 
+                                    key={idx}
+                                    onClick={() => { onSelect(path); onClose(); }}
+                                    className="group flex flex-col items-center gap-2 p-2 rounded hover:bg-[#333] border border-transparent hover:border-emerald-500 transition-all relative"
+                                    title={resolveUrl(path)}
+                                >
+                                    <div className="w-24 h-24 bg-[#111] border border-stone-700 flex items-center justify-center overflow-hidden relative">
+                                        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
+                                        <img 
+                                            src={resolveUrl(path)} 
+                                            alt="asset" 
+                                            onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM1NSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIj48L2NpcmNsZT48bGluZSB4MT0iMTIiIHkxPSI4IiB4Mj0iMTIiIHkyPSIxMiI+PC9saW5lPjxsaW5lIHgxPSIxMiIgeTE9IjE2IiB4Mj0iMTIuMDEiIHkyPSIxNiI+PC9saW5lPjwvc3ZnPg==';
+                                            }}
+                                            className="max-w-full max-h-full object-contain relative z-10 image-pixelated" 
+                                        />
+                                    </div>
+                                    <span className="text-[10px] text-stone-400 break-all w-full text-center font-mono truncate px-1">
+                                        {path.startsWith('data:') ? 'Local Asset' : (path.startsWith('http') ? 'External Link' : path.split('/').pop())}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </>
                 )}
             </div>
         </div>
@@ -232,20 +273,6 @@ const DataEditor: React.FC = () => {
         }
     };
 
-    const resolveAssetUrl = (path: string) => {
-        if (!path) return '';
-        if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
-        
-        // Logic specific to Vercel/Local vs GitHub
-        if (IS_REPO_PUBLIC) {
-             const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-             return `${GITHUB_ASSET_BASE_URL}${cleanPath}`;
-        } else {
-            // Private mode: Ensure it starts with / for relative path from root
-            return path.startsWith('/') ? path : `/${path}`;
-        }
-    };
-
     const handleFileUpload = (file: File) => {
         if (!showAssetPicker) return;
         
@@ -273,27 +300,37 @@ const DataEditor: React.FC = () => {
     // Helper to render preview image with error handling
     const PreviewImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
         const [error, setError] = useState(false);
-        
+        const resolvedSrc = resolveAssetPath(src);
+
         useEffect(() => {
             setError(false);
         }, [src]);
 
         if (error || !src) {
              return (
-                 <div className={`${className} bg-red-900/50 flex flex-col items-center justify-center border border-red-500 text-red-500`}>
+                 <div className={`${className} bg-red-900/50 flex flex-col items-center justify-center border border-red-500 text-red-500 text-center`}>
                      <span className="text-xl font-bold">!</span>
                      <span className="text-[8px] uppercase">Missing</span>
+                     <a href={resolvedSrc} target="_blank" rel="noopener noreferrer" className="text-[8px] underline text-blue-400 mt-1">Check URL</a>
                  </div>
              );
         }
 
         return (
-            <img 
-                src={src} 
-                alt={alt} 
-                className={className} 
-                onError={() => setError(true)}
-            />
+            <div className="relative group w-full h-full flex items-center justify-center">
+                <img 
+                    src={resolvedSrc} 
+                    alt={alt} 
+                    className={className} 
+                    onError={() => setError(true)}
+                    title={`Source: ${src}\nResolved: ${resolvedSrc}`}
+                />
+                {/* Debug Tooltip on Hover */}
+                <div className="absolute hidden group-hover:flex bottom-0 left-0 right-0 bg-black/80 text-[8px] text-white p-1 break-all flex-col z-50">
+                    <div>Res: {resolvedSrc}</div>
+                    <a href={resolvedSrc} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline font-bold mt-1">Open Original</a>
+                </div>
+            </div>
         );
     };
 
@@ -317,7 +354,7 @@ const DataEditor: React.FC = () => {
                     onClose={() => setShowAssetPicker(null)}
                     onSelect={(path) => handleUpdate(showAssetPicker.field, path)}
                     onUpload={handleFileUpload}
-                    resolveUrl={resolveAssetUrl}
+                    resolveUrl={resolveAssetPath}
                 />
             )}
 
@@ -402,6 +439,25 @@ const DataEditor: React.FC = () => {
                                         className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-stone-200 focus:border-emerald-500 focus:outline-none" 
                                     />
                                 </div>
+                                {/* NEW: Stats Editor */}
+                                <div className="col-span-1">
+                                    <label className="block text-xs uppercase text-stone-500 mb-1 font-bold">Base HP</label>
+                                    <input 
+                                        type="number" 
+                                        value={activeCreature.baseHp || 50} 
+                                        onChange={(e) => handleUpdate('baseHp', parseInt(e.target.value))}
+                                        className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-stone-200 focus:border-emerald-500 focus:outline-none" 
+                                    />
+                                </div>
+                                <div className="col-span-1">
+                                    <label className="block text-xs uppercase text-stone-500 mb-1 font-bold">Base Damage</label>
+                                    <input 
+                                        type="number" 
+                                        value={activeCreature.baseDamage || 5} 
+                                        onChange={(e) => handleUpdate('baseDamage', parseInt(e.target.value))}
+                                        className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-stone-200 focus:border-emerald-500 focus:outline-none" 
+                                    />
+                                </div>
                             </div>
 
                             <div className="space-y-4 pt-4 border-t border-[#333]">
@@ -411,15 +467,15 @@ const DataEditor: React.FC = () => {
                                     <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
                                          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
                                          <PreviewImage 
-                                            src={resolveAssetUrl(activeCreature.spritePath)} 
+                                            src={activeCreature.spritePath} 
                                             alt="sprite" 
                                             className="max-w-full max-h-full relative z-10 image-pixelated" 
                                          />
                                     </div>
-                                    <div className="flex-1 overflow-hidden">
+                                    <div className="flex-1 min-w-0">
                                         <div className="text-[10px] text-stone-500 uppercase">In-Game Sprite</div>
-                                        <div className="text-xs font-mono truncate text-yellow-500" title={activeCreature.spritePath}>
-                                            {activeCreature.spritePath.substring(0, 30)}{activeCreature.spritePath.length > 30 ? '...' : ''}
+                                        <div className="text-xs font-mono text-yellow-500 break-all select-all">
+                                            {activeCreature.spritePath}
                                         </div>
                                     </div>
                                     <button 
@@ -434,15 +490,15 @@ const DataEditor: React.FC = () => {
                                 <div className="flex items-center gap-4 bg-[#222] p-2 rounded border border-[#333]">
                                     <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
                                         <PreviewImage 
-                                            src={resolveAssetUrl(activeCreature.illustrationPath)} 
+                                            src={activeCreature.illustrationPath} 
                                             alt="illustration" 
                                             className="w-full h-full object-cover" 
                                         />
                                     </div>
-                                    <div className="flex-1 overflow-hidden">
+                                    <div className="flex-1 min-w-0">
                                         <div className="text-[10px] text-stone-500 uppercase">Bestiary Illustration</div>
-                                        <div className="text-xs font-mono truncate text-yellow-500" title={activeCreature.illustrationPath}>
-                                            {activeCreature.illustrationPath.substring(0, 30)}{activeCreature.illustrationPath.length > 30 ? '...' : ''}
+                                        <div className="text-xs font-mono text-yellow-500 break-all select-all">
+                                            {activeCreature.illustrationPath}
                                         </div>
                                     </div>
                                     <button 
@@ -475,15 +531,15 @@ const DataEditor: React.FC = () => {
                                     <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
                                          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
                                         <PreviewImage 
-                                            src={resolveAssetUrl(playerConfig.spritePath)} 
+                                            src={playerConfig.spritePath} 
                                             alt="sprite" 
                                             className="max-w-full max-h-full relative z-10 image-pixelated" 
                                          />
                                     </div>
-                                    <div className="flex-1 overflow-hidden">
+                                    <div className="flex-1 min-w-0">
                                         <div className="text-[10px] text-stone-500 uppercase">Investigator Sprite (Top-Down)</div>
-                                        <div className="text-xs font-mono truncate text-yellow-500" title={playerConfig.spritePath}>
-                                            {playerConfig.spritePath.substring(0, 30)}{playerConfig.spritePath.length > 30 ? '...' : ''}
+                                        <div className="text-xs font-mono text-yellow-500 break-all select-all">
+                                            {playerConfig.spritePath}
                                         </div>
                                     </div>
                                     <button 
@@ -533,7 +589,7 @@ const DataEditor: React.FC = () => {
                                 <div className="flex justify-center mb-6">
                                     <div className="w-32 h-32 border-4 border-stone-800 bg-black shadow-inner">
                                         <PreviewImage 
-                                            src={resolveAssetUrl(activeCreature.illustrationPath)} 
+                                            src={activeCreature.illustrationPath} 
                                             alt="illustration"
                                             className="w-full h-full object-cover" 
                                         />
@@ -545,10 +601,21 @@ const DataEditor: React.FC = () => {
                                         <span className="text-[10px] uppercase font-bold text-stone-500 mb-1">In-Game Sprite</span>
                                         <div className="w-12 h-12">
                                             <PreviewImage 
-                                                src={resolveAssetUrl(activeCreature.spritePath)} 
+                                                src={activeCreature.spritePath} 
                                                 alt="sprite"
                                                 className="w-full h-full image-pixelated object-contain" 
                                             />
+                                        </div>
+                                    </div>
+                                    {/* LIVE STATS PREVIEW */}
+                                    <div className="flex flex-col items-center ml-4 border-l border-stone-400 pl-4">
+                                        <div className="text-center mb-2">
+                                            <div className="text-xl font-bold font-mono text-red-700">{activeCreature.baseHp || 50}</div>
+                                            <div className="text-[8px] uppercase font-bold text-stone-500">HP</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-xl font-bold font-mono text-stone-800">{activeCreature.baseDamage || 5}</div>
+                                            <div className="text-[8px] uppercase font-bold text-stone-500">DMG</div>
                                         </div>
                                     </div>
                                 </div>
@@ -559,7 +626,7 @@ const DataEditor: React.FC = () => {
                              <div className="flex flex-col items-center gap-4">
                                 <div className="w-32 h-32 bg-[#1c1917] border border-stone-700 flex items-center justify-center">
                                      <PreviewImage 
-                                        src={resolveAssetUrl(playerConfig.spritePath)} 
+                                        src={playerConfig.spritePath} 
                                         alt="sprite"
                                         className="w-16 h-16 image-pixelated" 
                                      />

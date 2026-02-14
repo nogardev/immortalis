@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { gameState } from '../services/gameState';
 import { Creature, DamageType } from '../types';
-import { GITHUB_ASSET_BASE_URL } from '../constants';
+import { resolveAssetPath } from '../constants';
 
 const Bestiary: React.FC = () => {
     // Fetch dynamic data from GameState instead of static constants
@@ -9,14 +9,6 @@ const Bestiary: React.FC = () => {
     
     const [selectedId, setSelectedId] = useState<string | null>(creatures[0]?.id || null);
     const selectedCreature = creatures.find(c => c.id === selectedId);
-
-    const resolveUrl = (path: string) => {
-        if (!path) return '';
-        // Check global registry for blob URLs (from Editor imports)
-        // @ts-ignore
-        if (window.GAME_BLOB_REGISTRY && window.GAME_BLOB_REGISTRY[path]) return window.GAME_BLOB_REGISTRY[path];
-        return path;
-    };
 
     return (
         <div className="flex h-full w-full bg-stone-950 p-8">
@@ -66,15 +58,8 @@ const Bestiary: React.FC = () => {
                                 <div className="flex gap-6 mb-6">
                                     <div className="w-48 h-48 bg-stone-900 border-4 border-stone-800 shadow-inner shrink-0 overflow-hidden">
                                         <img 
-                                            src={resolveUrl(selectedCreature.illustrationPath)} 
+                                            src={resolveAssetPath(selectedCreature.illustrationPath)} 
                                             alt={selectedCreature.name} 
-                                            onError={(e) => {
-                                                const target = e.target as HTMLImageElement;
-                                                // Try GitHub fallback if local failed and not already tried
-                                                if (!target.src.includes('raw.githubusercontent.com') && !selectedCreature.illustrationPath.startsWith('http')) {
-                                                    target.src = `${GITHUB_ASSET_BASE_URL}${selectedCreature.illustrationPath}`;
-                                                }
-                                            }}
                                             className="w-full h-full object-cover opacity-90" 
                                         />
                                     </div>

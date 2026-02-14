@@ -52,6 +52,9 @@ export interface Creature {
   id: string;
   name: string;
   threatLevel: number; // 1-25
+  baseHp: number; // New Custom Field
+  baseDamage: number; // New Custom Field
+  maxPhases?: number; // How many boss phases (1-3)
   description: string;
   behavior: string;
   weaknesses: DamageType[];

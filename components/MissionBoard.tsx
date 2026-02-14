@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MISSIONS, GITHUB_ASSET_BASE_URL } from '../constants';
+import { MISSIONS, resolveAssetPath } from '../constants';
 import { Mission } from '../types';
 import { gameState } from '../services/gameState';
 
@@ -12,14 +12,6 @@ const MissionBoard: React.FC<MissionBoardProps> = ({ onStartMission }) => {
     const [, setTick] = useState(0);
     useEffect(() => setTick(t => t + 1), []);
 
-    const resolveUrl = (path: string) => {
-        if (!path) return '';
-        // Check global registry for blob URLs (from Editor imports)
-        // @ts-ignore
-        if (window.GAME_BLOB_REGISTRY && window.GAME_BLOB_REGISTRY[path]) return window.GAME_BLOB_REGISTRY[path];
-        return path;
-    };
-
     return (
         <div className="p-8 h-full bg-stone-900 overflow-y-auto">
             <h2 className="text-4xl font-serif text-stone-200 mb-2">Investigation Board</h2>
@@ -31,7 +23,7 @@ const MissionBoard: React.FC<MissionBoardProps> = ({ onStartMission }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {MISSIONS.map(mission => {
                     const bossData = gameState.getCreatureById(mission.bossId);
-                    const bossSprite = bossData ? resolveUrl(bossData.spritePath) : null;
+                    const bossSprite = bossData ? resolveAssetPath(bossData.spritePath) : null;
 
                     return (
                         <div 
@@ -62,13 +54,6 @@ const MissionBoard: React.FC<MissionBoardProps> = ({ onStartMission }) => {
                                             <img 
                                                 src={bossSprite} 
                                                 alt="Boss" 
-                                                onError={(e) => {
-                                                    const target = e.target as HTMLImageElement;
-                                                    // Try GitHub fallback
-                                                    if (!target.src.includes('raw.githubusercontent.com') && bossData && !bossData.spritePath.startsWith('http')) {
-                                                        target.src = `${GITHUB_ASSET_BASE_URL}${bossData.spritePath}`;
-                                                    }
-                                                }}
                                                 className="w-10 h-10 object-contain image-pixelated" 
                                             />
                                         ) : (

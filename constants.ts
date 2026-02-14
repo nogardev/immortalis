@@ -1,39 +1,82 @@
 import { Creature, DamageType, Mission, PlayerStats, Weapon } from './types';
+import { ASSET_REGISTRY } from './game/asset_registry';
 
 // ==========================================
-// CONFIGURAÇÃO DE ASSETS (PIPELINE)
+// CONFIGURAÇÃO DE ASSETS (SMART PIPELINE)
 // ==========================================
 
-// Mude para TRUE se você tornar seu repositório PÚBLICO no GitHub.
-// Isso permitirá carregar imagens direto do código fonte via CDN.
-export const IS_REPO_PUBLIC = false; 
-
-// Seu usuário/repositório (usado apenas se IS_REPO_PUBLIC = true)
 const REPO_PATH = 'nogardev/immortalis'; 
 const BRANCH = 'main';
 
-// LÓGICA DE URL:
-// Se Público -> Usa JSDelivr (Rápido, CDN Global) ou Raw GitHub.
-// Se Privado -> Usa caminho relativo (ex: /assets/...). O arquivo DEVE estar na pasta 'public/' do projeto.
-export const GITHUB_ASSET_BASE_URL = IS_REPO_PUBLIC 
-    ? `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/`
-    : ''; // String vazia força o navegador a procurar na mesma pasta do site (Local/Vercel)
-
-// Helper para construir URL
-const asset = (path: string) => {
-    // Se for link externo (Discord, Imgur) ou Base64, usa direto
-    if (path.startsWith('http') || path.startsWith('data:')) return path;
-    
-    // Limpeza do path
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-    
-    // Se for privado, garante que começa com / para ser relativo à raiz do site
-    if (!IS_REPO_PUBLIC && !path.startsWith('/')) {
-        return `/${cleanPath}`;
+/**
+ * Helper to determine asset mode without circular dependency on GameState
+ */
+const getIsRepoPublic = (): boolean => {
+    try {
+        const STORAGE_KEY = 'IMMORTALIS_GAME_STATE_V8';
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // Se o usuário explicitamente setou LOCAL, respeitamos. Caso contrário, GITHUB.
+            return parsed.assetSourceMode !== 'LOCAL'; 
+        }
+    } catch (e) {
+        // Fallback
     }
-
-    return `${GITHUB_ASSET_BASE_URL}${cleanPath}`;
+    return true; // DEFAULT: GitHub Public Mode (Agora que o repo é público)
 };
+
+export const IS_REPO_PUBLIC = getIsRepoPublic();
+
+/**
+ * RESOLVE ASSET PATH
+ * Centraliza a lógica de carregamento de imagens.
+ */
+export const resolveAssetPath = (path: string): string => {
+    if (!path) return '';
+    if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
+
+    // Normalização Inteligente:
+    // Remove barra inicial '/'
+    let cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    
+    // Se o usuário colou "public/assets/..." mas o Vite (Local) precisa de "assets/..."
+    // Ou se o GitHub precisa de "public/assets/..."
+    
+    const useGitHub = IS_REPO_PUBLIC;
+
+    if (useGitHub) {
+        // GITHUB RAW MODE
+        // O GitHub Raw PRECISA da pasta 'public' no caminho para este projeto específico
+        // baseado na estrutura vista: immortalis/public/assets/...
+        let repoPath = cleanPath;
+        
+        // Se o caminho NÃO começa com 'public/', adicionamos.
+        if (!repoPath.startsWith('public/')) {
+            repoPath = `public/${repoPath}`;
+        }
+        
+        return `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/${repoPath}`;
+    } else {
+        // LOCAL/VERCEL MODE
+        // O servidor de desenvolvimento serve a pasta 'public' na raiz.
+        // Logo, 'public/assets/img.png' deve ser acessado como '/assets/img.png'
+        
+        let servePath = cleanPath;
+        
+        // Se o caminho COMEÇA com 'public/', removemos para o modo local.
+        if (servePath.startsWith('public/')) {
+            servePath = servePath.replace(/^public\//, '');
+        }
+        
+        return `/${servePath}`;
+    }
+};
+
+// Wrapper simples para usar nas definições abaixo
+const asset = (path: string) => path; 
+
+export const GITHUB_ASSET_BASE_URL = `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/public/`;
 
 export const INITIAL_PLAYER_STATS: PlayerStats = {
   level: 1,
@@ -56,7 +99,7 @@ export const WEAPONS: Weapon[] = [
     damage: 15,
     type: DamageType.BALLISTIC,
     cooldown: 800,
-    spritePath: asset('assets/sprites/weapons/revolver.png')
+    spritePath: asset(ASSET_REGISTRY.WEAPONS.REVOLVER)
   },
   {
     id: 'silver_whip',
@@ -65,7 +108,7 @@ export const WEAPONS: Weapon[] = [
     damage: 8,
     type: DamageType.HOLY,
     cooldown: 400,
-    spritePath: asset('assets/sprites/weapons/whip.png')
+    spritePath: asset(ASSET_REGISTRY.WEAPONS.WHIP)
   }
 ];
 
@@ -74,36 +117,42 @@ export const BESTIARY_DATA: Creature[] = [
     id: 'loira_banheiro',
     name: 'Loira do Banheiro',
     threatLevel: 1,
+    baseHp: 60,
+    baseDamage: 12,
     description: 'A psychological manifestation born from school urban legends. Manifests near mirrors.',
     behavior: 'Teleports behind the player when looked at directly for too long.',
     weaknesses: [DamageType.HOLY, DamageType.OCCULT],
     drops: ['Mirror Shard', 'Ectoplasm'],
-    spritePath: asset('assets/sprites/creatures/loira_idle.png'),
-    illustrationPath: asset('assets/bestiary/loira_sketch.png'),
+    spritePath: asset(ASSET_REGISTRY.CREATURES.LOIRA_IDLE),
+    illustrationPath: asset(ASSET_REGISTRY.ILLUSTRATIONS.LOIRA_SKETCH),
     unlocked: true
   },
   {
     id: 'corpo_seco',
     name: 'Corpo-Seco',
     threatLevel: 4,
+    baseHp: 150,
+    baseDamage: 8,
     description: 'A dried corpse rejected by both heaven and hell. Clings to trees and unwary travelers.',
     behavior: 'Slow movement, high grappling damage. Immunue to physical pain.',
     weaknesses: [DamageType.FIRE, DamageType.HOLY],
     drops: ['Dry Bone', 'Cursed Soil'],
-    spritePath: asset('assets/sprites/creatures/corpo_seco.png'),
-    illustrationPath: asset('assets/bestiary/corpo_seco_sketch.png'),
+    spritePath: asset(ASSET_REGISTRY.CREATURES.CORPO_SECO),
+    illustrationPath: asset(ASSET_REGISTRY.ILLUSTRATIONS.CORPO_SECO_SKETCH),
     unlocked: false
   },
   {
     id: 'lobisomem',
     name: 'Lobisomem (Werewolf)',
     threatLevel: 12,
+    baseHp: 300,
+    baseDamage: 25,
     description: 'A cursed human forced to transform under the full moon.',
     behavior: 'Extremely fast, aggressive melee attacks. Regenerates health.',
     weaknesses: [DamageType.BALLISTIC, DamageType.HOLY], 
     drops: ['Wolf Pelt', 'Cursed Blood'],
-    spritePath: asset('assets/sprites/creatures/werewolf.png'),
-    illustrationPath: asset('assets/bestiary/werewolf_sketch.png'),
+    spritePath: asset(ASSET_REGISTRY.CREATURES.WEREWOLF),
+    illustrationPath: asset(ASSET_REGISTRY.ILLUSTRATIONS.WEREWOLF_SKETCH),
     unlocked: false
   }
 ];

@@ -1,7 +1,7 @@
 import { eventBus, GameEvents } from '../services/eventBus';
 import { gameState } from '../services/gameState';
 import { Mission } from '../types';
-import { GITHUB_ASSET_BASE_URL } from '../constants';
+import { resolveAssetPath } from '../constants';
 
 // --- ENGINE TYPES ---
 interface Point { x: number; y: number; }
@@ -17,9 +17,23 @@ interface Entity {
     vy: number;
     hp: number;
     maxHp: number;
+    damage?: number; 
     spritePath?: string;
     spriteLoaded?: boolean;
     spriteError?: boolean;
+    
+    // Boss & AI States
+    isBoss?: boolean;
+    phase?: number;        // Current Phase (1, 2, 3)
+    maxPhases?: number;    // Total phases
+    
+    // Abilities
+    lastSpecialTime?: number; // Scream cooldown
+    isScreaming?: boolean;    // Visual state for scream
+    
+    lastDashTime?: number;    // Dash cooldown
+    isDashing?: boolean;      // Is currently dashing?
+    dashDuration?: number;    // How long left in dash
 }
 
 // --- ENGINE CORE ---
@@ -37,6 +51,12 @@ export class ImmortalisEngine {
     private camera: Point = { x: 0, y: 0 };
     private currentMission: Mission | null = null;
     private zoom: number = 1.6;
+
+    // Juice Effects (Screen Shake)
+    private shakeX: number = 0;
+    private shakeY: number = 0;
+    private shakeDuration: number = 0;
+    private shakeIntensity: number = 0;
     
     // Map Data
     private mapWidth = 50;
@@ -85,6 +105,9 @@ export class ImmortalisEngine {
         };
 
         this.entities.push(this.player);
+        
+        // Listen for DevChat events to modify entities in real-time
+        eventBus.on(GameEvents.REQUEST_DEV_ACTION, this.handleDevAction);
 
         if (this.currentMission) {
             this.spawnEnemy(600, 400, this.currentMission.bossId);
@@ -97,6 +120,22 @@ export class ImmortalisEngine {
         canvas.addEventListener('mousemove', this.handleMouseMove);
         canvas.addEventListener('mousedown', this.handleMouseDown);
     }
+    
+    private handleDevAction = (action: any) => {
+        if (action.type === 'HEAL_PLAYER') {
+            this.player.hp = this.player.maxHp;
+            this.triggerShake(0.2, 5);
+        }
+        if (action.type === 'KILL_ALL') {
+             this.entities.forEach(e => {
+                 if (e.type === 'ENEMY') e.hp = 0;
+             });
+             this.triggerShake(0.5, 20);
+        }
+        if (action.type === 'SPAWN') {
+             this.spawnEnemy(this.player.x + 100, this.player.y, action.id);
+        }
+    };
 
     private handleKeyDown = (e: KeyboardEvent) => this.keys.add(e.code);
     private handleKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
@@ -126,6 +165,24 @@ export class ImmortalisEngine {
         this.running = false;
         window.removeEventListener('keydown', this.handleKeyDown);
         window.removeEventListener('keyup', this.handleKeyUp);
+        eventBus.off(GameEvents.REQUEST_DEV_ACTION, this.handleDevAction);
+    }
+
+    // --- SCREEN SHAKE UTILS ---
+    private triggerShake(duration: number, intensity: number) {
+        this.shakeDuration = duration;
+        this.shakeIntensity = intensity;
+    }
+
+    private updateShake(dt: number) {
+        if (this.shakeDuration > 0) {
+            this.shakeDuration -= dt;
+            this.shakeX = (Math.random() * 2 - 1) * this.shakeIntensity;
+            this.shakeY = (Math.random() * 2 - 1) * this.shakeIntensity;
+        } else {
+            this.shakeX = 0;
+            this.shakeY = 0;
+        }
     }
 
     private loop = (timestamp: number) => {
@@ -140,6 +197,9 @@ export class ImmortalisEngine {
     }
 
     private update(dt: number) {
+        // Handle Global Effects
+        this.updateShake(dt);
+
         const playerConfig = gameState.getPlayerConfig();
         const speed = playerConfig.baseStats.speed;
 
@@ -152,15 +212,83 @@ export class ImmortalisEngine {
 
         this.entities.forEach(entity => {
             if (entity.type === 'ENEMY') {
+                const now = Date.now();
                 const dx = this.player.x - entity.x;
                 const dy = this.player.y - entity.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist > 30) {
-                    entity.vx = (dx / dist) * 100;
-                    entity.vy = (dy / dist) * 100;
-                } else {
-                    entity.vx = 0;
-                    entity.vy = 0;
+                
+                // Initialize timings
+                if (!entity.lastSpecialTime) entity.lastSpecialTime = now;
+                if (!entity.lastDashTime) entity.lastDashTime = now;
+                if (!entity.dashDuration) entity.dashDuration = 0;
+                
+                entity.isScreaming = false;
+
+                // --- BOSS LOGIC: LOIRA DO BANHEIRO ---
+                if (entity.id === 'loira_banheiro') {
+                    const phase = entity.phase || 1;
+                    
+                    // HANDLE DASH MOVEMENT (Phase 2 & 3)
+                    if (entity.dashDuration > 0) {
+                        entity.dashDuration -= dt;
+                        entity.isDashing = true;
+                        // Continue moving in current velocity (Dash physics)
+                    } else {
+                        entity.isDashing = false;
+                        
+                        // ABILITY: DASH (Phase 2 & 3)
+                        // Phase 2 cooldown: 4s, Phase 3 cooldown: 2.5s
+                        const dashCooldown = phase === 3 ? 2500 : 4000;
+                        if (phase >= 2 && now - entity.lastDashTime > dashCooldown && dist > 100 && dist < 400) {
+                             // TRIGGER DASH
+                             entity.lastDashTime = now;
+                             const speedMult = phase === 3 ? 600 : 500;
+                             entity.vx = (dx / dist) * speedMult;
+                             entity.vy = (dy / dist) * speedMult;
+                             entity.dashDuration = 0.3; // 300ms dash
+                             
+                             // Visual/Feedback
+                             this.triggerShake(0.1, 2);
+                        } 
+                        // ABILITY: SCREAM (Phase 1 & 3)
+                        else if ((phase === 1 || phase === 3) && now - entity.lastSpecialTime > 5000 && dist < 250) {
+                            if (Math.random() < 0.02) { 
+                                // SCREAM ATTACK!
+                                entity.lastSpecialTime = now;
+                                entity.isScreaming = true;
+                                
+                                this.triggerShake(0.5, 10);
+                                
+                                // Knockback Player
+                                const recoilX = (this.player.x - entity.x) / dist;
+                                const recoilY = (this.player.y - entity.y) / dist;
+                                this.player.x += recoilX * 120;
+                                this.player.y += recoilY * 120;
+                            }
+                        }
+                        // STANDARD MOVEMENT
+                        else {
+                            if (dist > 30) {
+                                // Phase 3 is slightly faster
+                                const moveSpeed = phase === 3 ? 130 : 100;
+                                entity.vx = (dx / dist) * moveSpeed;
+                                entity.vy = (dy / dist) * moveSpeed;
+                            } else {
+                                entity.vx = 0;
+                                entity.vy = 0;
+                            }
+                        }
+                    }
+                } 
+                // GENERIC ENEMY LOGIC
+                else {
+                    if (dist > 30) {
+                        entity.vx = (dx / dist) * 100;
+                        entity.vy = (dy / dist) * 100;
+                    } else {
+                        entity.vx = 0;
+                        entity.vy = 0;
+                    }
                 }
             }
 
@@ -180,6 +308,11 @@ export class ImmortalisEngine {
                 const hit = this.entities.find(e => e.type === 'ENEMY' && this.checkEntityCollision(entity, e));
                 if (hit) {
                     hit.hp -= 10;
+                    // Dont remove boss immediately if it has phases
+                    if (hit.hp <= 0 && hit.isBoss && (hit.phase || 1) < (hit.maxPhases || 1)) {
+                        // PHASE TRANSITION LOGIC HANDLED BELOW
+                        return false; 
+                    }
                     if (hit.hp <= 0) return false; 
                     return false; 
                 }
@@ -187,7 +320,36 @@ export class ImmortalisEngine {
                 if (distFromStart > 800) return false;
             }
             
+            // DAMAGE & DEATH HANDLING
             if (entity.type === 'ENEMY' && entity.hp <= 0) {
+                
+                // BOSS PHASE TRANSITION
+                if (entity.isBoss && entity.phase && entity.maxPhases) {
+                    if (entity.phase < entity.maxPhases) {
+                        // TRANSITION TO NEXT PHASE
+                        entity.phase++;
+                        entity.hp = entity.maxHp; // Refill HP
+                        
+                        // Phase Transition Effect: Push Player Away (Explosion)
+                        this.triggerShake(0.5, 15);
+                        const dx = this.player.x - entity.x;
+                        const dy = this.player.y - entity.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        if (dist > 0) {
+                            this.player.x += (dx/dist) * 200;
+                            this.player.y += (dy/dist) * 200;
+                        }
+
+                        // Temporarily stop all velocity
+                        entity.vx = 0;
+                        entity.vy = 0;
+                        
+                        console.log(`BOSS PHASE ${entity.phase} STARTED`);
+                        return true; // Keep entity alive
+                    }
+                }
+
+                // ACTUAL DEATH
                 if (this.currentMission && entity.id === this.currentMission.bossId) {
                     setTimeout(() => {
                         eventBus.emit(GameEvents.MISSION_COMPLETE, { victory: true, mission: this.currentMission });
@@ -208,7 +370,8 @@ export class ImmortalisEngine {
 
         this.ctx.save();
         this.ctx.scale(this.zoom, this.zoom);
-        this.ctx.translate(-this.camera.x, -this.camera.y);
+        // Apply Camera + Screen Shake
+        this.ctx.translate(-this.camera.x + this.shakeX, -this.camera.y + this.shakeY);
 
         const startCol = Math.floor(this.camera.x / this.tileSize);
         const endCol = startCol + (this.canvas.width / this.zoom / this.tileSize) + 1;
@@ -232,6 +395,7 @@ export class ImmortalisEngine {
         this.entities.forEach(e => {
             let drawn = false;
 
+            // DRAW SPRITE
             if (e.spritePath) {
                 const img = this.getImage(e.spritePath);
                 if (img && img.complete && img.naturalHeight !== 0) {
@@ -242,16 +406,13 @@ export class ImmortalisEngine {
                 }
             }
 
+            // FALLBACK / RECT DRAW
             if (!drawn) {
                 if (e.spritePath && this.brokenImages.has(e.spritePath)) {
                     this.ctx.fillStyle = '#ff00ff'; 
                     this.ctx.globalAlpha = 0.5;
                     this.ctx.fillRect(e.x, e.y, e.width, e.height);
                     this.ctx.globalAlpha = 1.0;
-                    
-                    this.ctx.fillStyle = 'white';
-                    this.ctx.font = '10px monospace';
-                    this.ctx.fillText("404", e.x + 6, e.y + 20);
                 } else {
                     this.ctx.fillStyle = e.color;
                     if (e.type === 'PROJECTILE') {
@@ -264,11 +425,70 @@ export class ImmortalisEngine {
                 }
             }
 
+            // --- VISUAL EFFECTS (DASH GHOSTS & SCREAM) ---
+            if (e.isDashing) {
+                // Ghost trail
+                this.ctx.globalAlpha = 0.3;
+                this.ctx.fillStyle = 'white';
+                this.ctx.fillRect(e.x - e.vx * 0.05, e.y - e.vy * 0.05, e.width, e.height);
+                this.ctx.globalAlpha = 1.0;
+            }
+
+            if (e.isScreaming && this.shakeDuration > 0) {
+                 this.ctx.beginPath();
+                 this.ctx.strokeStyle = `rgba(255, 255, 255, ${this.shakeDuration * 2})`;
+                 this.ctx.lineWidth = 2;
+                 this.ctx.arc(e.x + 16, e.y + 16, 50 + (1 - this.shakeDuration)*100, 0, Math.PI * 2);
+                 this.ctx.stroke();
+                 
+                 this.ctx.globalCompositeOperation = 'source-atop';
+                 this.ctx.fillStyle = 'white';
+                 this.ctx.fillRect(e.x, e.y, e.width, e.height);
+                 this.ctx.globalCompositeOperation = 'source-over';
+            }
+
+            // --- HEALTH BARS ---
             if (e.type === 'ENEMY') {
-                 this.ctx.fillStyle = 'red';
-                 this.ctx.fillRect(e.x, e.y - 8, 32, 4);
-                 this.ctx.fillStyle = 'green';
-                 this.ctx.fillRect(e.x, e.y - 8, 32 * (e.hp/e.maxHp), 4);
+                 if (e.isBoss) {
+                     // BOSS HP BAR (Larger, Phases)
+                     const barWidth = 64;
+                     const barHeight = 8;
+                     const xOffset = (barWidth - e.width) / 2;
+                     const yOffset = 16;
+
+                     // Determine Color based on Phase
+                     let hpColor = '#22c55e'; // Phase 1: Green
+                     if (e.phase === 2) hpColor = '#f97316'; // Phase 2: Orange
+                     if (e.phase === 3) hpColor = '#9333ea'; // Phase 3: Purple
+
+                     this.ctx.fillStyle = '#000';
+                     this.ctx.fillRect(e.x - xOffset, e.y - yOffset, barWidth, barHeight);
+                     
+                     this.ctx.fillStyle = hpColor;
+                     this.ctx.fillRect(e.x - xOffset, e.y - yOffset, barWidth * (e.hp/e.maxHp), barHeight);
+                     
+                     // Border
+                     this.ctx.strokeStyle = '#fff';
+                     this.ctx.lineWidth = 1;
+                     this.ctx.strokeRect(e.x - xOffset, e.y - yOffset, barWidth, barHeight);
+
+                     // Phase Indicators (dots)
+                     if (e.maxPhases && e.phase) {
+                         const remainingPhases = (e.maxPhases - e.phase) + 1; // 1 means current
+                         for(let i=0; i< e.maxPhases; i++) {
+                             this.ctx.fillStyle = i < remainingPhases ? hpColor : '#333';
+                             this.ctx.beginPath();
+                             this.ctx.arc(e.x - xOffset + (i * 10) + 4, e.y - yOffset - 4, 3, 0, Math.PI*2);
+                             this.ctx.fill();
+                         }
+                     }
+                 } else {
+                     // STANDARD ENEMY HP BAR
+                     this.ctx.fillStyle = 'red';
+                     this.ctx.fillRect(e.x, e.y - 8, 32, 4);
+                     this.ctx.fillStyle = 'green';
+                     this.ctx.fillRect(e.x, e.y - 8, 32 * (e.hp/e.maxHp), 4);
+                 }
             }
         });
 
@@ -277,49 +497,56 @@ export class ImmortalisEngine {
 
     // --- UTILS ---
     private getImage(path: string): HTMLImageElement | null {
-        // Resolve path via global registry if it's a blob
-        const registry = window.GAME_BLOB_REGISTRY || {};
-        const resolvedPath = registry[path] || path;
+        // Use central resolver from constants
+        const resolvedPath = resolveAssetPath(path);
 
-        if (this.brokenImages.has(resolvedPath)) {
+        // Check registry for blobs (local editor uploads)
+        const registry = window.GAME_BLOB_REGISTRY || {};
+        const finalPath = registry[path] || resolvedPath;
+
+        if (this.brokenImages.has(finalPath)) {
             return null; 
         }
 
-        if (this.imageCache.has(resolvedPath)) {
-            return this.imageCache.get(resolvedPath)!;
+        if (this.imageCache.has(finalPath)) {
+            return this.imageCache.get(finalPath)!;
         }
 
         const img = new Image();
         img.crossOrigin = "Anonymous"; 
-        
-        let src = resolvedPath;
-
-        // NEW LOGIC: Support External URLs AND Relative Paths
-        // If it starts with http or data, use it as is.
-        // If it doesn't, allow it to be relative (don't prepend github raw url).
-        if (!src.startsWith('http') && !src.startsWith('data:') && GITHUB_ASSET_BASE_URL) {
-            src = `${GITHUB_ASSET_BASE_URL}${src}`;
-        }
-        // If GITHUB_ASSET_BASE_URL is empty (default now), 'src' stays as 'assets/...' which is relative to domain.
-
-        img.src = src;
-        
-        img.onload = () => {
-             // Success
-        };
+        img.src = finalPath;
         
         img.onerror = () => {
-            console.warn(`IMMORTALIS ENGINE: Asset Load Error: ${path} | Final URL: ${img.src}`);
-            this.brokenImages.add(resolvedPath);
+            console.warn(`IMMORTALIS ENGINE: Asset Load Error: ${path} | Resolved: ${finalPath}`);
+            this.brokenImages.add(finalPath);
         };
 
-        this.imageCache.set(resolvedPath, img);
+        this.imageCache.set(finalPath, img);
         return img;
     }
 
     private spawnEnemy(x: number, y: number, creatureId: string) {
         const creatureData = gameState.getCreatureById(creatureId);
         const spritePath = creatureData?.spritePath || 'assets/sprites/creatures/loira_idle.png';
+        
+        const hp = creatureData?.baseHp || (50 + (creatureData?.threatLevel || 1) * 10);
+        const dmg = creatureData?.baseDamage || 5;
+
+        // BOSS CONFIGURATION
+        let isBoss = false;
+        let phases = 1;
+        let currentHp = hp;
+
+        // --- NEW: READ FROM DATA OR FALLBACK TO CODE ---
+        // If creatureData has maxPhases set in Database/Editor, use it.
+        if (creatureData?.maxPhases && creatureData.maxPhases > 1) {
+            isBoss = true;
+            phases = creatureData.maxPhases;
+        } else if (creatureId === 'loira_banheiro') {
+            // Legacy/Fallback for hardcoded boss logic if data is missing
+            isBoss = true;
+            phases = 3; 
+        }
 
         this.entities.push({
             id: creatureId, 
@@ -328,10 +555,14 @@ export class ImmortalisEngine {
             color: '#78716c',
             type: 'ENEMY',
             vx: 0, vy: 0,
-            hp: 50 + (creatureData?.threatLevel || 1) * 10,
-            maxHp: 50 + (creatureData?.threatLevel || 1) * 10,
+            hp: currentHp,
+            maxHp: currentHp,
+            damage: dmg,
             spritePath: spritePath,
-            spriteLoaded: false
+            spriteLoaded: false,
+            isBoss: isBoss,
+            phase: 1,
+            maxPhases: phases
         });
     }
 
