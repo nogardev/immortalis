@@ -45,6 +45,7 @@ const App: React.FC = () => {
           <div className="flex-1 flex flex-col bg-stone-950 p-4">
              <div className="flex-1 flex justify-center items-center relative">
                <GameCanvas 
+                    key={activeMission?.id || 'game-canvas'} // Forces remount on mission change
                     mission={activeMission}
                     onGameOver={handleGameOver} 
                     onMissionComplete={handleMissionComplete}

@@ -15,6 +15,16 @@ export enum ThreatLevel {
 }
 
 // Interfaces
+export interface PlayerConfig {
+    spritePath: string;
+    baseStats: {
+        hp: number;
+        stamina: number;
+        baseDamage: number;
+        speed: number;
+    }
+}
+
 export interface PlayerStats {
   level: number;
   xp: number;

@@ -1,5 +1,4 @@
 import { eventBus, GameEvents } from '../services/eventBus';
-import { INITIAL_PLAYER_STATS } from '../constants';
 import { gameState } from '../services/gameState';
 import { Mission } from '../types';
 
@@ -35,6 +34,7 @@ export class ImmortalisEngine {
     private entities: Entity[] = [];
     private camera: Point = { x: 0, y: 0 };
     private currentMission: Mission | null = null;
+    private zoom: number = 1.6; // Adjusted zoom for better gameplay balance
     
     // Map Data (Placeholder 50x50 grid of 32px tiles)
     private mapWidth = 50;
@@ -50,6 +50,7 @@ export class ImmortalisEngine {
         const context = canvas.getContext('2d');
         if (!context) throw new Error("Could not get 2D context");
         this.ctx = context;
+        this.ctx.imageSmoothingEnabled = false; // Ensure sharp pixel art scaling
         this.currentMission = mission || null;
 
         // Initialize Map (Simple Border)
@@ -62,20 +63,22 @@ export class ImmortalisEngine {
             this.tiles.push(row);
         }
 
-        // Initialize Player
+        // Initialize Player from GameState Config
+        const playerConfig = gameState.getPlayerConfig();
+        
         this.player = {
             id: 'player',
             x: 400,
             y: 300,
-            width: 32,
+            width: 32, // Hitbox size
             height: 32,
             color: '#ef4444',
             type: 'PLAYER',
             vx: 0,
             vy: 0,
-            hp: INITIAL_PLAYER_STATS.attributes.hp,
-            maxHp: INITIAL_PLAYER_STATS.attributes.hp,
-            spritePath: 'assets/sprites/player/idle.png' // Basic placeholder
+            hp: playerConfig.baseStats.hp,
+            maxHp: playerConfig.baseStats.hp,
+            spritePath: playerConfig.spritePath
         };
 
         this.entities.push(this.player);
@@ -99,8 +102,16 @@ export class ImmortalisEngine {
     private handleKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
     private handleMouseMove = (e: MouseEvent) => {
         const rect = this.canvas.getBoundingClientRect();
-        this.mouse.x = e.clientX - rect.left + this.camera.x;
-        this.mouse.y = e.clientY - rect.top + this.camera.y;
+        // Scale mouse input relative to canvas display size vs internal size
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+
+        const canvasX = (e.clientX - rect.left) * scaleX;
+        const canvasY = (e.clientY - rect.top) * scaleY;
+
+        // Convert to World Coordinates considering Zoom
+        this.mouse.x = canvasX / this.zoom + this.camera.x;
+        this.mouse.y = canvasY / this.zoom + this.camera.y;
     }
     private handleMouseDown = () => {
         this.attack();
@@ -131,7 +142,8 @@ export class ImmortalisEngine {
     }
 
     private update(dt: number) {
-        const speed = 200; // px per second
+        const playerConfig = gameState.getPlayerConfig();
+        const speed = playerConfig.baseStats.speed; // Use dynamic speed from config
 
         // Player Movement
         this.player.vx = 0;
@@ -199,9 +211,11 @@ export class ImmortalisEngine {
             return true;
         });
 
-        // Camera Follow
-        this.camera.x = this.player.x - this.canvas.width / 2;
-        this.camera.y = this.player.y - this.canvas.height / 2;
+        // Camera Follow (Center Player)
+        // Camera position is the top-left corner of the view in World Space.
+        // We calculate half the view size in world units by dividing canvas size by zoom.
+        this.camera.x = this.player.x - (this.canvas.width / this.zoom) / 2;
+        this.camera.y = this.player.y - (this.canvas.height / this.zoom) / 2;
     }
 
     private render() {
@@ -210,23 +224,29 @@ export class ImmortalisEngine {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.ctx.save();
-        // Camera Transform
+        
+        // Apply Zoom (Scale)
+        this.ctx.scale(this.zoom, this.zoom);
+        
+        // Apply Camera Translation (Move world so camera is at 0,0)
         this.ctx.translate(-this.camera.x, -this.camera.y);
 
-        // Draw Map
+        // Draw Map (Optimized Culling)
         const startCol = Math.floor(this.camera.x / this.tileSize);
-        const endCol = startCol + (this.canvas.width / this.tileSize) + 1;
+        const endCol = startCol + (this.canvas.width / this.zoom / this.tileSize) + 1;
         const startRow = Math.floor(this.camera.y / this.tileSize);
-        const endRow = startRow + (this.canvas.height / this.tileSize) + 1;
+        const endRow = startRow + (this.canvas.height / this.zoom / this.tileSize) + 1;
 
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
+                // Only render visible tiles
                 if (x >= startCol -1 && x <= endCol +1 && y >= startRow -1 && y <= endRow +1) {
                     const tile = this.tiles[y][x];
                     if (tile === 1) this.ctx.fillStyle = '#44403c'; // Wall
                     else this.ctx.fillStyle = '#1c1917'; // Floor
                     this.ctx.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
                     this.ctx.strokeStyle = '#292524';
+                    this.ctx.lineWidth = 1;
                     this.ctx.strokeRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
                 }
             }
@@ -238,7 +258,11 @@ export class ImmortalisEngine {
             if (e.spritePath) {
                 const img = this.getImage(e.spritePath);
                 if (img) {
-                    this.ctx.drawImage(img, e.x, e.y, e.width, e.height);
+                    // Center the sprite over the hitbox
+                    // Assuming sprite is roughly 48x48 and hitbox is 32x32
+                    const drawX = e.x - (48 - e.width)/2; 
+                    const drawY = e.y - (48 - e.height)/2;
+                    this.ctx.drawImage(img, drawX, drawY, 48, 48);
                 } else {
                     // Fallback rectangle
                     this.ctx.fillStyle = e.color;
@@ -294,7 +318,7 @@ export class ImmortalisEngine {
         this.entities.push({
             id: creatureId, // ID used to check victory
             x, y,
-            width: 48, height: 48, // Standard size
+            width: 32, height: 32, // Standard size
             color: '#78716c',
             type: 'ENEMY',
             vx: 0, vy: 0,
@@ -305,7 +329,7 @@ export class ImmortalisEngine {
     }
 
     private attack() {
-        // Calculate direction to mouse
+        // Calculate direction to mouse (in World Space)
         const centerX = this.player.x + this.player.width/2;
         const centerY = this.player.y + this.player.height/2;
         

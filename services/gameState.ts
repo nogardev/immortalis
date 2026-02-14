@@ -1,9 +1,13 @@
-import { BESTIARY_DATA, WEAPONS } from '../constants';
-import { Creature, Weapon } from '../types';
+import { BESTIARY_DATA, WEAPONS, INITIAL_PLAYER_STATS } from '../constants';
+import { Creature, Weapon, PlayerConfig } from '../types';
 
 class GameStateManager {
     private creatures: Creature[] = [...BESTIARY_DATA];
     private weapons: Weapon[] = [...WEAPONS];
+    private playerConfig: PlayerConfig = {
+        spritePath: 'assets/sprites/player/idle.png',
+        baseStats: { ...INITIAL_PLAYER_STATS.attributes }
+    };
 
     // Creatures
     getCreatures() { return this.creatures; }
@@ -31,6 +35,13 @@ class GameStateManager {
         } else {
             this.weapons.push(updatedWeapon);
         }
+    }
+
+    // Player
+    getPlayerConfig() { return this.playerConfig; }
+    
+    updatePlayerConfig(config: PlayerConfig) {
+        this.playerConfig = config;
     }
 }
 

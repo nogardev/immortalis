@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
-import { BESTIARY_DATA } from '../constants';
+import { gameState } from '../services/gameState';
 import { Creature, DamageType } from '../types';
 
 const Bestiary: React.FC = () => {
-    const [selectedId, setSelectedId] = useState<string | null>(BESTIARY_DATA[0].id);
-    const selectedCreature = BESTIARY_DATA.find(c => c.id === selectedId);
+    // Fetch dynamic data from GameState instead of static constants
+    const creatures = gameState.getCreatures();
+    
+    const [selectedId, setSelectedId] = useState<string | null>(creatures[0]?.id || null);
+    const selectedCreature = creatures.find(c => c.id === selectedId);
+
+    const resolveUrl = (path: string) => {
+        if (!path) return '';
+        // Check global registry for blob URLs (from Editor imports)
+        // @ts-ignore
+        if (window.GAME_BLOB_REGISTRY && window.GAME_BLOB_REGISTRY[path]) return window.GAME_BLOB_REGISTRY[path];
+        return path;
+    };
 
     return (
         <div className="flex h-full w-full bg-stone-950 p-8">
@@ -17,7 +28,7 @@ const Bestiary: React.FC = () => {
                 <div className="w-1/3 border-r-2 border-[#d3c2b0] p-6 flex flex-col relative z-10">
                     <h2 className="text-3xl font-bold mb-6 font-serif text-stone-800 border-b-2 border-stone-400 pb-2">Bestiary</h2>
                     <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                        {BESTIARY_DATA.map(creature => (
+                        {creatures.map(creature => (
                             <button
                                 key={creature.id}
                                 onClick={() => setSelectedId(creature.id)}
@@ -52,8 +63,12 @@ const Bestiary: React.FC = () => {
                                 </div>
 
                                 <div className="flex gap-6 mb-6">
-                                    <div className="w-48 h-48 bg-stone-900 border-4 border-stone-800 shadow-inner shrink-0">
-                                        <img src={selectedCreature.illustrationPath} alt={selectedCreature.name} className="w-full h-full object-cover opacity-90" />
+                                    <div className="w-48 h-48 bg-stone-900 border-4 border-stone-800 shadow-inner shrink-0 overflow-hidden">
+                                        <img 
+                                            src={resolveUrl(selectedCreature.illustrationPath)} 
+                                            alt={selectedCreature.name} 
+                                            className="w-full h-full object-cover opacity-90" 
+                                        />
                                     </div>
                                     <p className="text-lg leading-relaxed font-serif text-stone-800">
                                         {selectedCreature.description}

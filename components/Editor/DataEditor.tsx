@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gameState } from '../../services/gameState'; // Import GameState
-import { Creature, Weapon } from '../../types';
+import { Creature, Weapon, PlayerConfig } from '../../types';
 
 // --- MOCK ASSET FILE SYSTEM ---
 const INITIAL_ASSETS = {
@@ -22,6 +22,11 @@ const INITIAL_ASSETS = {
 };
 
 // --- COMPONENTS ---
+
+interface Notification {
+    message: string;
+    type: 'success' | 'error';
+}
 
 interface AssetPickerProps {
     type: 'SPRITE' | 'ILLUSTRATION';
@@ -98,63 +103,114 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                 </div>
                 
                 <div className="p-2 bg-[#222] border-t border-[#333] text-[10px] text-stone-500 text-center font-mono">
-                    Target Folder: assets/{type === 'SPRITE' ? 'sprites/creatures/' : 'bestiary/'}
+                   Files will be linked via Blob URL for this session.
                 </div>
             </div>
         </div>
     );
 };
 
-type EditorTab = 'CREATURES' | 'WEAPONS';
+type EditorTab = 'CREATURES' | 'WEAPONS' | 'PLAYER';
 
 const DataEditor: React.FC = () => {
     const [activeTab, setActiveTab] = useState<EditorTab>('CREATURES');
+    const [notification, setNotification] = useState<Notification | null>(null);
     
-    // Load initial state from GameState service
+    // Local state to handle edits before saving
     const [creatures, setCreatures] = useState<Creature[]>(gameState.getCreatures());
     const [weapons, setWeapons] = useState<Weapon[]>(gameState.getWeapons());
-    const [selectedId, setSelectedId] = useState<string>(gameState.getCreatures()[0].id);
+    const [playerConfig, setPlayerConfig] = useState<PlayerConfig>(gameState.getPlayerConfig());
+    
+    const [selectedId, setSelectedId] = useState<string>('');
 
     const [assets, setAssets] = useState(INITIAL_ASSETS);
     const [blobRegistry, setBlobRegistry] = useState<{[key: string]: string}>({});
     const [showAssetPicker, setShowAssetPicker] = useState<null | { type: 'SPRITE' | 'ILLUSTRATION', field: string }>(null);
 
+    // Sync from GameState when tab changes to ensure fresh data
+    useEffect(() => {
+        if (activeTab === 'CREATURES') {
+            const currentCreatures = gameState.getCreatures();
+            setCreatures([...currentCreatures]); // Clone array to trigger re-render
+            setSelectedId(currentCreatures[0]?.id || '');
+        } else if (activeTab === 'WEAPONS') {
+            const currentWeapons = gameState.getWeapons();
+            setWeapons([...currentWeapons]);
+            setSelectedId(currentWeapons[0]?.id || '');
+        } else if (activeTab === 'PLAYER') {
+            setPlayerConfig({ ...gameState.getPlayerConfig() });
+            setSelectedId('PLAYER_CONFIG');
+        }
+    }, [activeTab]);
+
+    const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 3000);
+    };
+
     const activeCreature = creatures.find(c => c.id === selectedId);
     const activeWeapon = weapons.find(w => w.id === selectedId);
-
-    useEffect(() => {
-        if (activeTab === 'CREATURES') setSelectedId(creatures[0]?.id || '');
-        else setSelectedId(weapons[0]?.id || '');
-    }, [activeTab]);
 
     const handleUpdate = (field: string, value: any) => {
         if (activeTab === 'CREATURES') {
             setCreatures(prev => prev.map(c => c.id === selectedId ? { ...c, [field]: value } : c));
-        } else {
+        } else if (activeTab === 'WEAPONS') {
             setWeapons(prev => prev.map(w => w.id === selectedId ? { ...w, [field]: value } : w));
+        } else if (activeTab === 'PLAYER') {
+            setPlayerConfig(prev => ({
+                ...prev,
+                [field]: value
+            }));
         }
+    };
+
+    const handlePlayerStatsUpdate = (stat: string, value: number) => {
+        setPlayerConfig(prev => ({
+            ...prev,
+            baseStats: {
+                ...prev.baseStats,
+                [stat]: value
+            }
+        }));
     };
 
     const handleSave = () => {
         if (activeTab === 'CREATURES' && activeCreature) {
             gameState.updateCreature(activeCreature);
-            alert(`Saved ${activeCreature.name} to Game Engine. Changes will appear in next mission.`);
+            showNotification(`Saved ${activeCreature.name} data successfully.`);
         } else if (activeTab === 'WEAPONS' && activeWeapon) {
             gameState.updateWeapon(activeWeapon);
-            alert(`Saved ${activeWeapon.name} to Game Engine.`);
+            showNotification(`Saved ${activeWeapon.name} data successfully.`);
+        } else if (activeTab === 'PLAYER') {
+            gameState.updatePlayerConfig(playerConfig);
+            showNotification(`Player Configuration saved successfully.`);
         }
     };
 
     const resolveAssetUrl = (path: string) => {
         if (!path) return '';
         if (path.startsWith('http') || path.startsWith('data:')) return path;
+        // Check window registry first (shared with Engine)
+        // @ts-ignore
+        if (window.GAME_BLOB_REGISTRY && window.GAME_BLOB_REGISTRY[path]) return window.GAME_BLOB_REGISTRY[path];
         if (blobRegistry[path]) return blobRegistry[path];
         return path;
     };
 
     const handleFileUpload = (file: File) => {
         if (!showAssetPicker) return;
-        const folder = showAssetPicker.type === 'SPRITE' ? 'assets/sprites/creatures/' : 'assets/bestiary/';
+        
+        // Determine folder based on Context (Active Tab) NOT just the picker type
+        let folder = 'assets/';
+        if (showAssetPicker.type === 'ILLUSTRATION') {
+            folder += 'bestiary/';
+        } else {
+            // It is a SPRITE
+            if (activeTab === 'PLAYER') folder += 'sprites/player/';
+            else if (activeTab === 'WEAPONS') folder += 'sprites/weapons/';
+            else folder += 'sprites/creatures/';
+        }
+
         const virtualPath = `${folder}${file.name}`;
         const blobUrl = URL.createObjectURL(file);
 
@@ -176,6 +232,17 @@ const DataEditor: React.FC = () => {
 
     return (
         <div className="flex h-full bg-[#111] text-stone-200 font-sans relative">
+            
+            {/* Notification Toast */}
+            {notification && (
+                <div className={`absolute bottom-8 right-8 z-50 px-6 py-4 rounded shadow-2xl flex items-center gap-3 animate-bounce ${
+                    notification.type === 'success' ? 'bg-emerald-900 border border-emerald-500 text-white' : 'bg-red-900 border border-red-500 text-white'
+                }`}>
+                    <span className="text-xl">{notification.type === 'success' ? '💾' : '⚠️'}</span>
+                    <span className="font-bold">{notification.message}</span>
+                </div>
+            )}
+
             {showAssetPicker && (
                 <AssetPicker 
                     type={showAssetPicker.type}
@@ -201,32 +268,46 @@ const DataEditor: React.FC = () => {
                     >
                         Weapons
                     </button>
+                     <button 
+                        onClick={() => setActiveTab('PLAYER')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'PLAYER' ? 'bg-[#2d2d2d] text-emerald-500 border-b-2 border-emerald-500' : 'text-stone-500 hover:bg-[#222]'}`}
+                    >
+                        Player
+                    </button>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                    {(activeTab === 'CREATURES' ? creatures : weapons).map((item: any) => (
-                        <button
-                            key={item.id}
-                            onClick={() => setSelectedId(item.id)}
-                            className={`w-full text-left px-3 py-3 rounded text-sm flex items-center justify-between group transition-all ${
-                                selectedId === item.id 
-                                    ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-900/50' 
-                                    : 'hover:bg-[#252525] text-stone-400 border border-transparent'
-                            }`}
-                        >
-                            <span className="font-medium">{item.name}</span>
-                            {activeTab === 'CREATURES' && (
-                                <span className={`text-[10px] px-1.5 rounded ${item.threatLevel > 10 ? 'bg-red-900/50 text-red-300' : 'bg-stone-700 text-stone-400'}`}>
-                                    LV {item.threatLevel}
-                                </span>
-                            )}
-                        </button>
-                    ))}
+                    {activeTab === 'PLAYER' ? (
+                        <div className="p-3 text-sm text-stone-400 italic">
+                            Editing Global Player Config
+                        </div>
+                    ) : (
+                        (activeTab === 'CREATURES' ? creatures : weapons).map((item: any) => (
+                            <button
+                                key={item.id}
+                                onClick={() => setSelectedId(item.id)}
+                                className={`w-full text-left px-3 py-3 rounded text-sm flex items-center justify-between group transition-all ${
+                                    selectedId === item.id 
+                                        ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-900/50' 
+                                        : 'hover:bg-[#252525] text-stone-400 border border-transparent'
+                                }`}
+                            >
+                                <span className="font-medium">{item.name}</span>
+                                {activeTab === 'CREATURES' && (
+                                    <span className={`text-[10px] px-1.5 rounded ${item.threatLevel > 10 ? 'bg-red-900/50 text-red-300' : 'bg-stone-700 text-stone-400'}`}>
+                                        LV {item.threatLevel}
+                                    </span>
+                                )}
+                            </button>
+                        ))
+                    )}
                 </div>
             </div>
 
             <div className="flex-1 flex overflow-hidden">
                 <div className="flex-1 p-8 overflow-y-auto border-r border-[#333] bg-[#161616]">
+                    
+                    {/* CREATURE EDITOR */}
                     {activeTab === 'CREATURES' && activeCreature && (
                         <div className="space-y-6 max-w-xl mx-auto">
                             <div className="flex justify-between items-end mb-6 border-b border-[#333] pb-4">
@@ -270,6 +351,82 @@ const DataEditor: React.FC = () => {
                                         Browse / Import
                                     </button>
                                 </div>
+
+                                {/* BESTIARY ILLUSTRATION PICKER */}
+                                <div className="flex items-center gap-4 bg-[#222] p-2 rounded border border-[#333]">
+                                    <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
+                                        <img src={resolveAssetUrl(activeCreature.illustrationPath)} className="w-full h-full object-cover" alt="illustration" />
+                                    </div>
+                                    <div className="flex-1 overflow-hidden">
+                                        <div className="text-[10px] text-stone-500 uppercase">Bestiary Illustration</div>
+                                        <div className="text-xs font-mono truncate text-yellow-500" title={activeCreature.illustrationPath}>{activeCreature.illustrationPath}</div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setShowAssetPicker({ type: 'ILLUSTRATION', field: 'illustrationPath' })}
+                                        className="px-3 py-1 bg-[#444] hover:bg-[#555] text-xs rounded text-white border border-[#555]"
+                                    >
+                                        Browse / Import
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* PLAYER EDITOR */}
+                    {activeTab === 'PLAYER' && (
+                        <div className="space-y-6 max-w-xl mx-auto">
+                            <div className="flex justify-between items-end mb-6 border-b border-[#333] pb-4">
+                                <div>
+                                    <label className="text-[10px] text-stone-500 uppercase tracking-widest">Configuring</label>
+                                    <div className="text-xl font-mono text-stone-400">THE INVESTIGATOR</div>
+                                </div>
+                                <button onClick={handleSave} className="bg-emerald-700 hover:bg-emerald-600 text-white px-6 py-2 rounded text-sm font-bold shadow-lg shadow-emerald-900/20 transition-all">
+                                    SAVE PLAYER CONFIG
+                                </button>
+                            </div>
+
+                             <div className="space-y-4 pt-4">
+                                <label className="block text-xs uppercase text-stone-500 font-bold mb-2">Player Visual</label>
+                                <div className="flex items-center gap-4 bg-[#222] p-2 rounded border border-[#333]">
+                                    <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
+                                         <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
+                                        <img src={resolveAssetUrl(playerConfig.spritePath)} className="max-w-full max-h-full relative z-10 image-pixelated" alt="sprite" />
+                                    </div>
+                                    <div className="flex-1 overflow-hidden">
+                                        <div className="text-[10px] text-stone-500 uppercase">Investigator Sprite (Top-Down)</div>
+                                        <div className="text-xs font-mono truncate text-yellow-500" title={playerConfig.spritePath}>{playerConfig.spritePath}</div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setShowAssetPicker({ type: 'SPRITE', field: 'spritePath' })}
+                                        className="px-3 py-1 bg-[#444] hover:bg-[#555] text-xs rounded text-white border border-[#555]"
+                                    >
+                                        Browse / Import
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 pt-4 border-t border-[#333]">
+                                <label className="block text-xs uppercase text-stone-500 font-bold mb-2">Base Attributes</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] text-stone-500 mb-1">Max HP</label>
+                                        <input 
+                                            type="number" 
+                                            value={playerConfig.baseStats.hp} 
+                                            onChange={(e) => handlePlayerStatsUpdate('hp', parseInt(e.target.value))}
+                                            className="w-full bg-[#0a0a0a] border border-[#333] rounded p-2 text-stone-200" 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-stone-500 mb-1">Base Speed</label>
+                                        <input 
+                                            type="number" 
+                                            value={playerConfig.baseStats.speed} 
+                                            onChange={(e) => handlePlayerStatsUpdate('speed', parseInt(e.target.value))}
+                                            className="w-full bg-[#0a0a0a] border border-[#333] rounded p-2 text-stone-200" 
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -296,6 +453,18 @@ const DataEditor: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                        )}
+
+                        {activeTab === 'PLAYER' && (
+                             <div className="flex flex-col items-center gap-4">
+                                <div className="w-32 h-32 bg-[#1c1917] border border-stone-700 flex items-center justify-center">
+                                     <img src={resolveAssetUrl(playerConfig.spritePath)} className="w-16 h-16 image-pixelated" />
+                                </div>
+                                <div className="text-center text-stone-400">
+                                    <p className="font-serif text-lg text-emerald-500">The Investigator</p>
+                                    <p className="text-xs font-mono mt-2">HP: {playerConfig.baseStats.hp} | SPD: {playerConfig.baseStats.speed}</p>
+                                </div>
+                             </div>
                         )}
                     </div>
                 </div>
