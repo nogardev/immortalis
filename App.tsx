@@ -106,8 +106,7 @@ const App: React.FC = () => {
       default:
         return (
           <div className="flex-1 flex flex-col items-center justify-center bg-stone-950 bg-[url('https://www.transparenttextures.com/patterns/black-felt.png')]">
-            <h1 className="text-8xl font-serif text-stone-200 mb-2 tracking-widest" style={{ textShadow: '0 0 10px rgba(200,0,0,0.5)' }}>IMMORTALIS</h1>
-            <p className="text-stone-500 italic mb-12 text-xl">"Death is only an inconvenience."</p>
+            <h1 className="text-8xl font-serif text-stone-200 mb-12 tracking-widest" style={{ textShadow: '0 0 10px rgba(200,0,0,0.5)' }}>IMMORTALIS</h1>
             
             <div className="flex flex-col gap-4 w-64">
               <button 

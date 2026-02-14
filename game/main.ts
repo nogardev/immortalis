@@ -5,6 +5,10 @@ import { resolveAssetPath, GITHUB_ASSET_BASE_URL } from '../constants';
 
 // --- ENGINE TYPES ---
 interface Point { x: number; y: number; }
+
+type EntityType = 'PLAYER' | 'ENEMY' | 'PROJECTILE' | 'MIRROR';
+type BossState = 'NEUTRAL' | 'SCREAMING_TRANSITION' | 'HIDING' | 'TELEGRAPH' | 'DASHING' | 'STUNNED';
+
 interface Entity {
     id: string;
     x: number;
@@ -12,7 +16,7 @@ interface Entity {
     width: number;
     height: number;
     color: string;
-    type: 'PLAYER' | 'ENEMY' | 'PROJECTILE';
+    type: EntityType;
     vx: number;
     vy: number;
     hp: number;
@@ -21,11 +25,17 @@ interface Entity {
     spritePath?: string;
     spriteLoaded?: boolean;
     spriteError?: boolean;
+    opacity?: number; // Visual fade for telegraphing
     
     // Boss & AI States
     isBoss?: boolean;
-    phase?: number;        // Current Phase (1, 2, 3)
-    maxPhases?: number;    // Total phases
+    bossState?: BossState;
+    stateTimer?: number;    // Generic timer for states
+    phase?: number;         // Current Phase (1, 2, 3)
+    maxPhases?: number;     // Total phases
+    
+    // Phase 3 Mechanics
+    nextMirrorThreshold?: number; // 0.8, 0.6, 0.4, 0.2
     
     // Abilities
     lastSpecialTime?: number; // Scream cooldown
@@ -101,7 +111,8 @@ export class ImmortalisEngine {
             hp: playerConfig.baseStats.hp,
             maxHp: playerConfig.baseStats.hp,
             spritePath: playerConfig.spritePath,
-            spriteLoaded: false
+            spriteLoaded: false,
+            opacity: 1
         };
 
         this.entities.push(this.player);
@@ -221,55 +232,149 @@ export class ImmortalisEngine {
                 if (!entity.lastSpecialTime) entity.lastSpecialTime = now;
                 if (!entity.lastDashTime) entity.lastDashTime = now;
                 if (!entity.dashDuration) entity.dashDuration = 0;
+                if (!entity.stateTimer) entity.stateTimer = 0;
+                if (!entity.bossState) entity.bossState = 'NEUTRAL';
                 
+                // Reset visuals
                 entity.isScreaming = false;
+                entity.isDashing = false;
+                entity.opacity = 1;
 
                 // --- BOSS LOGIC: LOIRA DO BANHEIRO ---
                 if (entity.id === 'loira_banheiro') {
-                    const phase = entity.phase || 1;
                     
-                    // HANDLE DASH MOVEMENT (Phase 2 & 3)
-                    if (entity.dashDuration > 0) {
+                    // 1. HANDLE TRANSITION STATE (SCREAMING BETWEEN PHASES)
+                    if (entity.bossState === 'SCREAMING_TRANSITION') {
+                        entity.vx = 0;
+                        entity.vy = 0;
+                        entity.isScreaming = true;
+                        
+                        // Continue shaking screen
+                        this.shakeDuration = 0.1; 
+                        this.shakeIntensity = 8;
+
+                        entity.stateTimer -= dt;
+                        if (entity.stateTimer <= 0) {
+                            // Transition Finished
+                            entity.phase = (entity.phase || 1) + 1;
+                            entity.bossState = 'NEUTRAL';
+                            entity.hp = entity.maxHp; // Heal to full for next phase
+                            entity.nextMirrorThreshold = 0.8; // Reset threshold logic for Phase 3
+                        }
+                        return; // SKIP OTHER LOGIC
+                    }
+
+                    // 2. HANDLE PHASE 3 MIRROR MECHANICS
+                    if (entity.phase === 3) {
+                         // CHECK HP THRESHOLD (80%, 60%, 40%, 20%)
+                         const hpPercent = entity.hp / entity.maxHp;
+                         if (entity.bossState === 'NEUTRAL' && entity.nextMirrorThreshold && hpPercent <= entity.nextMirrorThreshold) {
+                             entity.bossState = 'HIDING';
+                             entity.stateTimer = 1.0; // Hide for 1s
+                             entity.nextMirrorThreshold -= 0.2; // Next threshold
+                             
+                             // Teleport off-screen or just hide
+                             // We'll rely on opacity and state checks in render/collision
+                         }
+
+                         if (entity.bossState === 'HIDING') {
+                             entity.opacity = 0;
+                             entity.vx = 0;
+                             entity.vy = 0;
+                             entity.stateTimer -= dt;
+                             
+                             if (entity.stateTimer <= 0) {
+                                 // Pick random mirror
+                                 const mirrors = this.entities.filter(e => e.type === 'MIRROR');
+                                 if (mirrors.length > 0) {
+                                     const targetMirror = mirrors[Math.floor(Math.random() * mirrors.length)];
+                                     entity.x = targetMirror.x;
+                                     entity.y = targetMirror.y;
+                                 }
+                                 
+                                 entity.bossState = 'TELEGRAPH';
+                                 entity.stateTimer = 1.5; // Telegraph time
+                             }
+                             return;
+                         }
+
+                         if (entity.bossState === 'TELEGRAPH') {
+                             entity.opacity = 0.4; // Ghostly
+                             entity.vx = 0;
+                             entity.vy = 0;
+                             entity.stateTimer -= dt;
+                             
+                             if (entity.stateTimer <= 0) {
+                                 // LAUNCH DASH
+                                 entity.bossState = 'DASHING';
+                                 entity.opacity = 1;
+                                 
+                                 const speedMult = 700;
+                                 const dashDx = this.player.x - entity.x;
+                                 const dashDy = this.player.y - entity.y;
+                                 const dashDist = Math.sqrt(dashDx*dashDx + dashDy*dashDy);
+                                 
+                                 entity.vx = (dashDx / dashDist) * speedMult;
+                                 entity.vy = (dashDy / dashDist) * speedMult;
+                                 
+                                 entity.dashDuration = 0.5; // Long dash
+                                 this.triggerShake(0.2, 5);
+                             }
+                             return;
+                         }
+                    }
+
+                    // 3. HANDLE MOVEMENT & ATTACKS (NEUTRAL STATE)
+                    
+                    // Handle Active Dash Duration (from Phase 2 skill or Phase 3 mechanic)
+                    if (entity.dashDuration > 0 || entity.bossState === 'DASHING') {
                         entity.dashDuration -= dt;
                         entity.isDashing = true;
-                        // Continue moving in current velocity (Dash physics)
-                    } else {
-                        entity.isDashing = false;
                         
-                        // ABILITY: DASH (Phase 2 & 3)
-                        // Phase 2 cooldown: 4s, Phase 3 cooldown: 2.5s
-                        const dashCooldown = phase === 3 ? 2500 : 4000;
-                        if (phase >= 2 && now - entity.lastDashTime > dashCooldown && dist > 100 && dist < 400) {
-                             // TRIGGER DASH
+                        if (entity.dashDuration <= 0) {
+                            entity.bossState = 'NEUTRAL';
+                        }
+                    } 
+                    else {
+                        // STANDARD BEHAVIOR
+                        const phase = entity.phase || 1;
+
+                        // ABILITY: DASH (Phase 2 Only - Regular Cooldown)
+                        const dashCooldown = 4000;
+                        if (phase === 2 && now - entity.lastDashTime > dashCooldown && dist > 100 && dist < 400) {
                              entity.lastDashTime = now;
-                             const speedMult = phase === 3 ? 600 : 500;
+                             const speedMult = 500;
                              entity.vx = (dx / dist) * speedMult;
                              entity.vy = (dy / dist) * speedMult;
-                             entity.dashDuration = 0.3; // 300ms dash
-                             
-                             // Visual/Feedback
+                             entity.dashDuration = 0.3;
                              this.triggerShake(0.1, 2);
                         } 
-                        // ABILITY: SCREAM (Phase 1 & 3)
+                        // ABILITY: SCREAM (Phase 1 & Phase 3 randomly)
                         else if ((phase === 1 || phase === 3) && now - entity.lastSpecialTime > 5000 && dist < 250) {
                             if (Math.random() < 0.02) { 
-                                // SCREAM ATTACK!
                                 entity.lastSpecialTime = now;
                                 entity.isScreaming = true;
-                                
                                 this.triggerShake(0.5, 10);
                                 
-                                // Knockback Player
-                                const recoilX = (this.player.x - entity.x) / dist;
-                                const recoilY = (this.player.y - entity.y) / dist;
-                                this.player.x += recoilX * 120;
-                                this.player.y += recoilY * 120;
+                                // Knockback Player (FIXED: With Wall Collision Check)
+                                const recoilX = (this.player.x - entity.x) / dist * 120;
+                                const recoilY = (this.player.y - entity.y) / dist * 120;
+                                
+                                const nextPlayerX = this.player.x + recoilX;
+                                const nextPlayerY = this.player.y + recoilY;
+
+                                // Check collisions for player before applying knockback
+                                if (!this.checkMapCollision(nextPlayerX, this.player.y, this.player.width, this.player.height)) {
+                                    this.player.x = nextPlayerX;
+                                }
+                                if (!this.checkMapCollision(this.player.x, nextPlayerY, this.player.width, this.player.height)) {
+                                    this.player.y = nextPlayerY;
+                                }
                             }
                         }
                         // STANDARD MOVEMENT
                         else {
                             if (dist > 30) {
-                                // Phase 3 is slightly faster
                                 const moveSpeed = phase === 3 ? 130 : 100;
                                 entity.vx = (dx / dist) * moveSpeed;
                                 entity.vy = (dy / dist) * moveSpeed;
@@ -292,6 +397,7 @@ export class ImmortalisEngine {
                 }
             }
 
+            // Apply Velocity
             const nextX = entity.x + entity.vx * dt;
             const nextY = entity.y + entity.vy * dt;
 
@@ -305,57 +411,63 @@ export class ImmortalisEngine {
 
         this.entities = this.entities.filter(entity => {
             if (entity.type === 'PROJECTILE') {
-                const hit = this.entities.find(e => e.type === 'ENEMY' && this.checkEntityCollision(entity, e));
+                // Ignore Boss if she is hiding in mirror
+                const hit = this.entities.find(e => 
+                    e.type === 'ENEMY' && 
+                    e.bossState !== 'HIDING' && // Can't hit while hiding
+                    this.checkEntityCollision(entity, e)
+                );
+                
                 if (hit) {
                     hit.hp -= 10;
-                    // Dont remove boss immediately if it has phases
-                    if (hit.hp <= 0 && hit.isBoss && (hit.phase || 1) < (hit.maxPhases || 1)) {
-                        // PHASE TRANSITION LOGIC HANDLED BELOW
-                        return false; 
+                    
+                    // BOSS DEATH/PHASE LOGIC
+                    if (hit.hp <= 0 && hit.isBoss) {
+                        const currentPhase = hit.phase || 1;
+                        const maxPhases = hit.maxPhases || 1;
+
+                        if (currentPhase < maxPhases) {
+                            // IF NOT LAST PHASE -> TRIGGER TRANSITION STATE
+                            if (hit.bossState !== 'SCREAMING_TRANSITION') {
+                                hit.bossState = 'SCREAMING_TRANSITION';
+                                hit.stateTimer = 3.0; // 3 Seconds Transition
+                                hit.hp = 1; // Prevent death logic removal
+                                
+                                this.triggerShake(0.5, 15);
+                                // Optional: Push player away
+                                const dx = this.player.x - hit.x;
+                                const dy = this.player.y - hit.y;
+                                const dist = Math.sqrt(dx*dx + dy*dy);
+                                if (dist > 0) {
+                                    // Safe push
+                                    const pushX = (dx/dist) * 100;
+                                    const pushY = (dy/dist) * 100;
+                                     if (!this.checkMapCollision(this.player.x + pushX, this.player.y, this.player.width, this.player.height)) {
+                                        this.player.x += pushX;
+                                    }
+                                    if (!this.checkMapCollision(this.player.x, this.player.y + pushY, this.player.width, this.player.height)) {
+                                        this.player.y += pushY;
+                                    }
+                                }
+                            }
+                        } else {
+                            // LAST PHASE - DIE FOR REAL
+                            if (this.currentMission && hit.id === this.currentMission.bossId) {
+                                setTimeout(() => {
+                                    eventBus.emit(GameEvents.MISSION_COMPLETE, { victory: true, mission: this.currentMission });
+                                }, 500);
+                            }
+                            return false; // Remove entity
+                        }
                     }
-                    if (hit.hp <= 0) return false; 
-                    return false; 
+                    else if (hit.hp <= 0) {
+                        return false; // Remove normal enemy
+                    }
+                    
+                    return false; // Remove bullet
                 }
                 const distFromStart = Math.sqrt((entity.x - this.player.x)**2 + (entity.y - this.player.y)**2);
                 if (distFromStart > 800) return false;
-            }
-            
-            // DAMAGE & DEATH HANDLING
-            if (entity.type === 'ENEMY' && entity.hp <= 0) {
-                
-                // BOSS PHASE TRANSITION
-                if (entity.isBoss && entity.phase && entity.maxPhases) {
-                    if (entity.phase < entity.maxPhases) {
-                        // TRANSITION TO NEXT PHASE
-                        entity.phase++;
-                        entity.hp = entity.maxHp; // Refill HP
-                        
-                        // Phase Transition Effect: Push Player Away (Explosion)
-                        this.triggerShake(0.5, 15);
-                        const dx = this.player.x - entity.x;
-                        const dy = this.player.y - entity.y;
-                        const dist = Math.sqrt(dx*dx + dy*dy);
-                        if (dist > 0) {
-                            this.player.x += (dx/dist) * 200;
-                            this.player.y += (dy/dist) * 200;
-                        }
-
-                        // Temporarily stop all velocity
-                        entity.vx = 0;
-                        entity.vy = 0;
-                        
-                        console.log(`BOSS PHASE ${entity.phase} STARTED`);
-                        return true; // Keep entity alive
-                    }
-                }
-
-                // ACTUAL DEATH
-                if (this.currentMission && entity.id === this.currentMission.bossId) {
-                    setTimeout(() => {
-                        eventBus.emit(GameEvents.MISSION_COMPLETE, { victory: true, mission: this.currentMission });
-                    }, 500);
-                }
-                return false; 
             }
             return true;
         });
@@ -393,7 +505,21 @@ export class ImmortalisEngine {
         }
 
         this.entities.forEach(e => {
+            // DRAW MIRRORS
+            if (e.type === 'MIRROR') {
+                this.ctx.fillStyle = '#06b6d4'; // Cyan
+                this.ctx.globalAlpha = 0.3;
+                this.ctx.fillRect(e.x, e.y, e.width, e.height);
+                this.ctx.strokeStyle = '#22d3ee';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(e.x, e.y, e.width, e.height);
+                this.ctx.globalAlpha = 1.0;
+                return; // Skip normal drawing
+            }
+
             let drawn = false;
+            const currentOpacity = e.opacity !== undefined ? e.opacity : 1.0;
+            this.ctx.globalAlpha = currentOpacity;
 
             // DRAW SPRITE
             if (e.spritePath) {
@@ -415,7 +541,6 @@ export class ImmortalisEngine {
                     this.ctx.fillStyle = '#ff00ff'; 
                     this.ctx.globalAlpha = 0.5;
                     this.ctx.fillRect(e.x, e.y, e.width, e.height);
-                    this.ctx.globalAlpha = 1.0;
                 } else {
                     // Simple shape fallback
                     this.ctx.fillStyle = e.color;
@@ -428,6 +553,8 @@ export class ImmortalisEngine {
                     }
                 }
             }
+            
+            this.ctx.globalAlpha = 1.0; // Reset
 
             // --- VISUAL EFFECTS (DASH GHOSTS & SCREAM) ---
             if (e.isDashing) {
@@ -440,19 +567,16 @@ export class ImmortalisEngine {
 
             if (e.isScreaming && this.shakeDuration > 0) {
                  this.ctx.beginPath();
-                 this.ctx.strokeStyle = `rgba(255, 255, 255, ${this.shakeDuration * 2})`;
+                 // Pulse effect
+                 const pulse = (Math.sin(Date.now() / 50) + 1) / 2;
+                 this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + pulse * 0.5})`;
                  this.ctx.lineWidth = 2;
-                 this.ctx.arc(e.x + 16, e.y + 16, 50 + (1 - this.shakeDuration)*100, 0, Math.PI * 2);
+                 this.ctx.arc(e.x + 16, e.y + 16, 40 + pulse * 20, 0, Math.PI * 2);
                  this.ctx.stroke();
-                 
-                 this.ctx.globalCompositeOperation = 'source-atop';
-                 this.ctx.fillStyle = 'white';
-                 this.ctx.fillRect(e.x, e.y, e.width, e.height);
-                 this.ctx.globalCompositeOperation = 'source-over';
             }
 
             // --- HEALTH BARS ---
-            if (e.type === 'ENEMY') {
+            if (e.type === 'ENEMY' && e.bossState !== 'HIDING') {
                  if (e.isBoss) {
                      // BOSS HP BAR (Larger, Phases)
                      const barWidth = 64;
@@ -520,33 +644,18 @@ export class ImmortalisEngine {
         const img = new Image();
         img.crossOrigin = "Anonymous"; 
         
-        // --- SMART FALLBACK LOGIC ---
-        // If the local image fails (404 because file was wiped), try the GitHub version
         img.onerror = () => {
-            // Only attempt fallback if we aren't already trying an HTTP URL
-            // and if it was intended to be a local path
             if (!finalPath.startsWith('http')) {
-                console.warn(`Local asset missing: ${finalPath}. Attempting automatic GitHub fallback...`);
-                
-                // Construct fallback URL: https://raw.github.../nogardev/immortalis/main/public/assets/...
-                // Normalize path to ensure no double slashes or missing public
                 let cleanPath = path;
                 if (cleanPath.startsWith('/')) cleanPath = cleanPath.slice(1);
                 if (cleanPath.startsWith('public/')) cleanPath = cleanPath.replace('public/', '');
-                
-                // Important: GITHUB_ASSET_BASE_URL already includes '/public/'
                 const fallbackUrl = `${GITHUB_ASSET_BASE_URL}${cleanPath}`;
-                
-                // Try loading the fallback
                 img.src = fallbackUrl;
                 
-                // If even the fallback fails, then it's truly broken
                 img.onerror = () => {
-                    console.error(`Asset failed on local AND GitHub: ${path}`);
                     this.brokenImages.add(finalPath);
                 };
             } else {
-                console.warn(`Failed to load external asset: ${finalPath}`);
                 this.brokenImages.add(finalPath);
             }
         };
@@ -569,15 +678,34 @@ export class ImmortalisEngine {
         let phases = 1;
         let currentHp = hp;
 
-        // --- NEW: READ FROM DATA OR FALLBACK TO CODE ---
-        // If creatureData has maxPhases set in Database/Editor, use it.
         if (creatureData?.maxPhases && creatureData.maxPhases > 1) {
             isBoss = true;
             phases = creatureData.maxPhases;
         } else if (creatureId === 'loira_banheiro') {
-            // Legacy/Fallback for hardcoded boss logic if data is missing
             isBoss = true;
             phases = 3; 
+        }
+
+        if (isBoss) {
+            // Spawn Mirrors for Boss Fight (Phase 3 Prep)
+            // Placing them in corners/midpoints
+            const mirrorLocs = [
+                {x: 200, y: 200}, {x: 1400, y: 200}, 
+                {x: 200, y: 1000}, {x: 1400, y: 1000},
+                {x: 800, y: 100}
+            ];
+            
+            mirrorLocs.forEach(loc => {
+                this.entities.push({
+                    id: 'mirror',
+                    x: loc.x, y: loc.y,
+                    width: 32, height: 64,
+                    color: 'cyan',
+                    type: 'MIRROR',
+                    vx: 0, vy: 0,
+                    hp: 9999, maxHp: 9999
+                });
+            });
         }
 
         this.entities.push({
@@ -593,8 +721,10 @@ export class ImmortalisEngine {
             spritePath: spritePath,
             spriteLoaded: false,
             isBoss: isBoss,
+            bossState: 'NEUTRAL',
             phase: 1,
-            maxPhases: phases
+            maxPhases: phases,
+            nextMirrorThreshold: 0.8 // 80% HP
         });
     }
 
