@@ -120,15 +120,14 @@ dist
 # ==========================================
 # 🛡️ PROTEÇÃO DE ASSETS (IMMORTALIS)
 # ==========================================
-# Ignora a pasta antiga para evitar conflitos
+
+# Ignora pastas antigas para evitar conflitos
 public/assets/
+public/game_assets/
 
-# PASTA SEGURA: game_assets
-# 1. Ignora TUDO dentro de game_assets (imagens, etc)
-public/game_assets/*
+# PASTA SEGURA FINAL: external_assets
+# 1. Ignora TUDO dentro de external_assets (imagens, etc)
+public/external_assets/**/*
 
-# 2. Mas permite subpastas
-!public/game_assets/**/
-
-# 3. E permite explicitamente READMEs para manter a estrutura de pastas no Git
-!public/game_assets/**/README.md
+# 2. Mas permite READMEs para manter a estrutura de pastas
+!public/external_assets/**/README.md

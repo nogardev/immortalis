@@ -58,15 +58,18 @@ const EngineDashboard: React.FC = () => {
                         <p>Secure Environment Active.</p>
                         
                         <div className="mt-4 p-4 border border-blue-900/50 rounded bg-blue-900/10 text-sm max-w-md text-center">
-                            <strong className="text-blue-400 block mb-2">GITHUB SYNC ACTIVE</strong>
-                            <p className="text-xs text-stone-400">
-                                The engine is configured to read assets directly from your repository:
-                                <br/>
-                                <span className="font-mono text-stone-500">nogardev/immortalis</span>
+                            <strong className="text-blue-400 block mb-2">GITHUB BRANCH SYNC ACTIVE</strong>
+                            <p className="text-xs text-stone-400 mb-2">
+                                To prevent accidental deletion of your images during synchronization, 
+                                the engine is now configured to read from a separate branch.
                             </p>
-                            <p className="text-xs text-stone-400 mt-2">
-                                <strong>Your files are safe.</strong> Even if the AI Studio environment resets, 
-                                the game will load your sprites from GitHub.
+                            <div className="text-left bg-black/30 p-2 rounded text-xs font-mono text-stone-300">
+                                1. Create branch: <span className="text-yellow-500">content</span><br/>
+                                2. Upload images to <span className="text-yellow-500">content</span> branch.<br/>
+                                3. Keep code on <span className="text-emerald-500">main</span> branch.
+                            </div>
+                            <p className="text-[10px] text-stone-500 mt-2 italic">
+                                Reading from: <strong>nogardev/immortalis/content</strong>
                             </p>
                         </div>
 
@@ -74,7 +77,7 @@ const EngineDashboard: React.FC = () => {
                             <p className="mb-2">Current Mode: <span className="font-bold text-white">{mode}</span></p>
                             <p className="text-xs">
                                 {mode === 'GITHUB' 
-                                    ? "Reading from 'public/assets/' folder in your GitHub Main Branch." 
+                                    ? "Reading from 'public/external_assets/' folder in 'content' branch." 
                                     : "Reading from local temporary storage."}
                             </p>
                         </div>
@@ -107,20 +110,19 @@ const EngineDashboard: React.FC = () => {
                                             </button>
                                         </div>
                                         <p className="text-[10px] text-gray-500 mt-1">
-                                            Keep this on <strong>GITHUB</strong> to ensure your sprites never disappear, 
-                                            as they are loaded from your permanent repository.
+                                            Keep this on <strong>GITHUB</strong>. Ensure your assets are uploaded to the <code>content</code> branch.
                                         </p>
                                     </div>
                                     
                                     <div className="pt-4 border-t border-[#444]">
                                         <label className="text-xs text-gray-400 uppercase font-bold block mb-2">Repository Actions</label>
                                         <a 
-                                            href="https://github.com/nogardev/immortalis/settings" 
+                                            href="https://github.com/nogardev/immortalis/branches" 
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="block w-full text-center bg-stone-800 hover:bg-stone-700 border border-stone-600 text-stone-300 py-2 rounded text-xs font-bold transition-colors"
                                         >
-                                            OPEN REPO SETTINGS ↗
+                                            MANAGE BRANCHES ↗
                                         </a>
                                     </div>
                                 </div>

@@ -7,7 +7,12 @@ import { ASSET_REGISTRY } from './game/asset_registry';
 // ==========================================
 
 const REPO_PATH = 'nogardev/immortalis'; 
-const BRANCH = 'main';
+const CODE_BRANCH = 'main';
+
+// ⚡ CRITICAL: Use a dedicated branch for assets to prevent local deletion.
+// Assets uploaded to 'main' get deleted by local sync if missing locally.
+// Assets in 'content' are invisible to local sync, so they remain safe.
+const ASSETS_BRANCH = 'content'; 
 
 // ==========================================
 // CONFIGURAÇÃO DE DESENVOLVIMENTO
@@ -43,8 +48,8 @@ export const IS_REPO_PUBLIC = getIsRepoPublic();
  * RESOLVE ASSET PATH
  * Centraliza a lógica de carregamento de imagens.
  * 
- * PADRÃO: As imagens devem estar fisicamente em "public/assets/..."
- * No código, referenciamos apenas como "assets/..."
+ * PADRÃO: As imagens devem estar fisicamente em "public/external_assets/..."
+ * No código, referenciamos apenas como "external_assets/..."
  */
 export const resolveAssetPath = (path: string): string => {
     if (!path) return '';
@@ -63,13 +68,10 @@ export const resolveAssetPath = (path: string): string => {
 
     if (useGitHub) {
         // GITHUB MODE:
-        // No GitHub, a estrutura de pastas é real. Precisamos apontar para /public/assets.
-        // cleanPath agora é algo como "assets/sprites/..."
-        return `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/public/${cleanPath}`;
+        // Reads from the SAFE ASSETS BRANCH ('content')
+        return `https://raw.githubusercontent.com/${REPO_PATH}/${ASSETS_BRANCH}/public/${cleanPath}`;
     } else {
         // LOCAL MODE:
-        // O servidor dev serve a pasta 'public' na raiz URL.
-        // Logo, "public/assets/img.png" vira "/assets/img.png"
         return `/${cleanPath}`;
     }
 };
@@ -77,7 +79,7 @@ export const resolveAssetPath = (path: string): string => {
 // Wrapper simples
 const asset = (path: string) => path; 
 
-export const GITHUB_ASSET_BASE_URL = `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/public/`;
+export const GITHUB_ASSET_BASE_URL = `https://raw.githubusercontent.com/${REPO_PATH}/${ASSETS_BRANCH}/public/`;
 
 export const INITIAL_PLAYER_STATS: PlayerStats = {
   level: 1,
