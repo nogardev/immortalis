@@ -3,6 +3,7 @@ import { gameState } from '../../services/gameState'; // Import GameState
 import { Creature, Weapon, PlayerConfig } from '../../types';
 
 // --- MOCK ASSET FILE SYSTEM ---
+// These are just defaults for the picker list, actual data comes from GameState
 const INITIAL_ASSETS = {
     sprites: [
         'assets/sprites/creatures/loira_idle.png',
@@ -74,7 +75,7 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                             +
                         </div>
                         <span className="text-[10px] text-stone-400 font-bold uppercase text-center">
-                            Import PNG<br/>from Disk
+                            Import PNG<br/>(Persist Local)
                         </span>
                     </button>
 
@@ -93,17 +94,17 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                                 />
                             </div>
                             <span className="text-[10px] text-stone-400 break-all w-full text-center font-mono truncate px-1">
-                                {path.split('/').pop()}
+                                {path.startsWith('data:') ? 'Local Asset' : path.split('/').pop()}
                             </span>
-                            {path.startsWith('blob:') && (
-                                <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full" title="Newly Imported"></span>
+                            {path.startsWith('data:') && (
+                                <span className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full" title="Stored Locally"></span>
                             )}
                         </button>
                     ))}
                 </div>
                 
                 <div className="p-2 bg-[#222] border-t border-[#333] text-[10px] text-stone-500 text-center font-mono">
-                   Files will be linked via Blob URL for this session.
+                   Images imported here are saved to your Browser's LocalStorage. They will persist on this machine only.
                 </div>
             </div>
         </div>
@@ -124,7 +125,7 @@ const DataEditor: React.FC = () => {
     const [selectedId, setSelectedId] = useState<string>('');
 
     const [assets, setAssets] = useState(INITIAL_ASSETS);
-    const [blobRegistry, setBlobRegistry] = useState<{[key: string]: string}>({});
+    // Registry for current session base64 lookups if needed, though we store data: urls directly now
     const [showAssetPicker, setShowAssetPicker] = useState<null | { type: 'SPRITE' | 'ILLUSTRATION', field: string }>(null);
 
     // Sync from GameState when tab changes to ensure fresh data
@@ -177,57 +178,44 @@ const DataEditor: React.FC = () => {
     const handleSave = () => {
         if (activeTab === 'CREATURES' && activeCreature) {
             gameState.updateCreature(activeCreature);
-            showNotification(`Saved ${activeCreature.name} data successfully.`);
+            showNotification(`Saved ${activeCreature.name} data to LocalStorage.`);
         } else if (activeTab === 'WEAPONS' && activeWeapon) {
             gameState.updateWeapon(activeWeapon);
-            showNotification(`Saved ${activeWeapon.name} data successfully.`);
+            showNotification(`Saved ${activeWeapon.name} data to LocalStorage.`);
         } else if (activeTab === 'PLAYER') {
             gameState.updatePlayerConfig(playerConfig);
-            showNotification(`Player Configuration saved successfully.`);
+            showNotification(`Player Config saved to LocalStorage.`);
         }
     };
 
     const resolveAssetUrl = (path: string) => {
         if (!path) return '';
-        if (path.startsWith('http') || path.startsWith('data:')) return path;
-        // Check window registry first (shared with Engine)
-        // @ts-ignore
-        if (window.GAME_BLOB_REGISTRY && window.GAME_BLOB_REGISTRY[path]) return window.GAME_BLOB_REGISTRY[path];
-        if (blobRegistry[path]) return blobRegistry[path];
+        if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
         return path;
     };
 
     const handleFileUpload = (file: File) => {
         if (!showAssetPicker) return;
         
-        // Determine folder based on Context (Active Tab) NOT just the picker type
-        let folder = 'assets/';
-        if (showAssetPicker.type === 'ILLUSTRATION') {
-            folder += 'bestiary/';
-        } else {
-            // It is a SPRITE
-            if (activeTab === 'PLAYER') folder += 'sprites/player/';
-            else if (activeTab === 'WEAPONS') folder += 'sprites/weapons/';
-            else folder += 'sprites/creatures/';
-        }
+        // Convert to Base64 for Persistence
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            
+            setAssets(prev => ({
+                ...prev,
+                [showAssetPicker.type === 'SPRITE' ? 'sprites' : 'illustrations']: [
+                    base64String,
+                    ...prev[showAssetPicker.type === 'SPRITE' ? 'sprites' : 'illustrations']
+                ]
+            }));
 
-        const virtualPath = `${folder}${file.name}`;
-        const blobUrl = URL.createObjectURL(file);
-
-        setBlobRegistry(prev => ({ ...prev, [virtualPath]: blobUrl }));
-        setAssets(prev => ({
-            ...prev,
-            [showAssetPicker.type === 'SPRITE' ? 'sprites' : 'illustrations']: [
-                virtualPath,
-                ...prev[showAssetPicker.type === 'SPRITE' ? 'sprites' : 'illustrations']
-            ]
-        }));
-        
-        // Expose blob URL globally for the engine to use (simulating file system access)
-        // @ts-ignore
-        if (!window.GAME_BLOB_REGISTRY) window.GAME_BLOB_REGISTRY = {};
-        // @ts-ignore
-        window.GAME_BLOB_REGISTRY[virtualPath] = blobUrl;
+            // Auto-select the uploaded asset
+            handleUpdate(showAssetPicker.field, base64String);
+            setShowAssetPicker(null);
+            showNotification("Asset Imported & Encoded locally.", "success");
+        };
+        reader.readAsDataURL(file);
     };
 
     return (
@@ -315,9 +303,14 @@ const DataEditor: React.FC = () => {
                                     <label className="text-[10px] text-stone-500 uppercase tracking-widest">Editing ID</label>
                                     <div className="text-xl font-mono text-stone-400">{activeCreature.id}</div>
                                 </div>
-                                <button onClick={handleSave} className="bg-emerald-700 hover:bg-emerald-600 text-white px-6 py-2 rounded text-sm font-bold shadow-lg shadow-emerald-900/20 transition-all">
-                                    SAVE & APPLY
-                                </button>
+                                <div className="flex gap-2">
+                                     <button onClick={() => gameState.resetData()} className="text-[#555] hover:text-red-500 px-3 py-2 text-xs uppercase font-bold">
+                                        Reset All
+                                    </button>
+                                    <button onClick={handleSave} className="bg-emerald-700 hover:bg-emerald-600 text-white px-6 py-2 rounded text-sm font-bold shadow-lg shadow-emerald-900/20 transition-all">
+                                        SAVE LOCAL
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -342,13 +335,15 @@ const DataEditor: React.FC = () => {
                                     </div>
                                     <div className="flex-1 overflow-hidden">
                                         <div className="text-[10px] text-stone-500 uppercase">In-Game Sprite</div>
-                                        <div className="text-xs font-mono truncate text-yellow-500" title={activeCreature.spritePath}>{activeCreature.spritePath}</div>
+                                        <div className="text-xs font-mono truncate text-yellow-500" title={activeCreature.spritePath}>
+                                            {activeCreature.spritePath.substring(0, 30)}{activeCreature.spritePath.length > 30 ? '...' : ''}
+                                        </div>
                                     </div>
                                     <button 
                                         onClick={() => setShowAssetPicker({ type: 'SPRITE', field: 'spritePath' })}
                                         className="px-3 py-1 bg-[#444] hover:bg-[#555] text-xs rounded text-white border border-[#555]"
                                     >
-                                        Browse / Import
+                                        Import
                                     </button>
                                 </div>
 
@@ -359,13 +354,15 @@ const DataEditor: React.FC = () => {
                                     </div>
                                     <div className="flex-1 overflow-hidden">
                                         <div className="text-[10px] text-stone-500 uppercase">Bestiary Illustration</div>
-                                        <div className="text-xs font-mono truncate text-yellow-500" title={activeCreature.illustrationPath}>{activeCreature.illustrationPath}</div>
+                                        <div className="text-xs font-mono truncate text-yellow-500" title={activeCreature.illustrationPath}>
+                                            {activeCreature.illustrationPath.substring(0, 30)}{activeCreature.illustrationPath.length > 30 ? '...' : ''}
+                                        </div>
                                     </div>
                                     <button 
                                         onClick={() => setShowAssetPicker({ type: 'ILLUSTRATION', field: 'illustrationPath' })}
                                         className="px-3 py-1 bg-[#444] hover:bg-[#555] text-xs rounded text-white border border-[#555]"
                                     >
-                                        Browse / Import
+                                        Import
                                     </button>
                                 </div>
                             </div>
@@ -394,13 +391,15 @@ const DataEditor: React.FC = () => {
                                     </div>
                                     <div className="flex-1 overflow-hidden">
                                         <div className="text-[10px] text-stone-500 uppercase">Investigator Sprite (Top-Down)</div>
-                                        <div className="text-xs font-mono truncate text-yellow-500" title={playerConfig.spritePath}>{playerConfig.spritePath}</div>
+                                        <div className="text-xs font-mono truncate text-yellow-500" title={playerConfig.spritePath}>
+                                            {playerConfig.spritePath.substring(0, 30)}{playerConfig.spritePath.length > 30 ? '...' : ''}
+                                        </div>
                                     </div>
                                     <button 
                                         onClick={() => setShowAssetPicker({ type: 'SPRITE', field: 'spritePath' })}
                                         className="px-3 py-1 bg-[#444] hover:bg-[#555] text-xs rounded text-white border border-[#555]"
                                     >
-                                        Browse / Import
+                                        Import
                                     </button>
                                 </div>
                             </div>

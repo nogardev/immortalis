@@ -4,7 +4,7 @@ import { ChatMessage } from '../types';
 const INITIAL_MESSAGES: ChatMessage[] = [
     {
         sender: 'AI DEV',
-        text: 'IMMORTALIS Engine initialized. Systems: Online. Waiting for Director instructions.',
+        text: 'IMMORTALIS Engine initialized. \n\n⚠️ ASSET PIPELINE ALERT:\nI noticed you are looking for uploaded sprites in the repo. \n\n1. Images uploaded in the Editor are LOCAL ONLY (for testing).\n2. To make them permanent on GitHub/Vercel, you must manually upload the .png files to the "assets/" folders I just created.\n3. The file name must match exactly what is in the Data Editor.',
         timestamp: new Date()
     }
 ];
@@ -43,8 +43,8 @@ const DevChat: React.FC = () => {
                 responseText = "Analyzing combat metrics. I can adjust damage values in constants.ts. Confirmation required before applying changes.";
             } else if (lowerInput.includes('map') || lowerInput.includes('tile')) {
                 responseText = "Opening Tilemap Editor overlay. Remember: Collision layers must be named 'Collision' in Tiled.";
-            } else if (lowerInput.includes('sprite') || lowerInput.includes('art')) {
-                responseText = "I cannot generate art assets. Please provide the file path in the 'assets/sprites/' directory.";
+            } else if (lowerInput.includes('sprite') || lowerInput.includes('art') || lowerInput.includes('upload')) {
+                responseText = "Remember: The Editor allows you to PREVIEW assets. To PUBLISH them, please add the actual .png files to the 'assets' folder in your repository structure.";
             } else {
                 responseText = `Processing command: "${userMsg.text}". Implementing logic within authorized systems.`;
             }
@@ -62,7 +62,7 @@ const DevChat: React.FC = () => {
         <div className="flex flex-col h-full bg-stone-900 border-l border-stone-700 w-80 font-pixel">
             <div className="p-3 bg-stone-800 border-b border-stone-700 flex justify-between items-center">
                 <span className="text-emerald-500 font-bold">● AI DEV SERVER</span>
-                <span className="text-stone-500 text-xs">v0.1.4</span>
+                <span className="text-stone-500 text-xs">v0.1.6</span>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -74,7 +74,7 @@ const DevChat: React.FC = () => {
                                 : 'bg-emerald-900/20 text-emerald-400 border border-emerald-900'
                         }`}>
                             <div className="font-bold text-[10px] uppercase mb-1 opacity-75">{msg.sender}</div>
-                            {msg.text}
+                            <pre className="whitespace-pre-wrap font-sans">{msg.text}</pre>
                         </div>
                     </div>
                 ))}
