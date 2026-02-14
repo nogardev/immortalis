@@ -270,7 +270,6 @@ export class ImmortalisEngine {
     // --- UTILS ---
     private getImage(path: string): HTMLImageElement | null {
         // Resolve path via global registry if it's a blob (from Editor import)
-        // @ts-ignore
         const registry = window.GAME_BLOB_REGISTRY || {};
         const resolvedPath = registry[path] || path;
 

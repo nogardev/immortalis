@@ -74,3 +74,10 @@ export interface TileMapData {
     spawnX: number;
     spawnY: number;
 }
+
+// Global Declaration for Asset Registry
+declare global {
+    interface Window {
+        GAME_BLOB_REGISTRY: { [key: string]: string };
+    }
+}
