@@ -391,6 +391,10 @@ export class ImmortalisEngine {
                             entity.hp = entity.maxHp; // Heal to full for next phase
                             entity.nextMirrorThreshold = 0.8; // Reset threshold logic for Phase 3
                         }
+                        
+                        // FIX: Push player away but check for walls (Anti-Tunneling)
+                        this.applyPlayerKnockback(entity.x, entity.y, 100 * dt);
+
                         return; // SKIP OTHER LOGIC
                     }
 
@@ -567,18 +571,8 @@ export class ImmortalisEngine {
                                 this.triggerShake(0.5, 10);
                                 this.damagePlayer(5); // Sonic damage?
                                 
-                                // Knockback Player
-                                const recoilX = (this.player.x - entity.x) / dist * 120;
-                                const recoilY = (this.player.y - entity.y) / dist * 120;
-                                const nextPlayerX = this.player.x + recoilX;
-                                const nextPlayerY = this.player.y + recoilY;
-
-                                if (!this.checkMapCollision(nextPlayerX, this.player.y, this.player.width, this.player.height)) {
-                                    this.player.x = nextPlayerX;
-                                }
-                                if (!this.checkMapCollision(this.player.x, nextPlayerY, this.player.width, this.player.height)) {
-                                    this.player.y = nextPlayerY;
-                                }
+                                // Knockback Player with Anti-Tunneling
+                                this.applyPlayerKnockback(entity.x, entity.y, 120);
                             }
                         }
                         // STANDARD MOVEMENT
@@ -662,20 +656,9 @@ export class ImmortalisEngine {
                                 hit.hp = 1; // Prevent death logic removal
                                 
                                 this.triggerShake(0.5, 15);
-                                // Optional: Push player away
-                                const dx = this.player.x - hit.x;
-                                const dy = this.player.y - hit.y;
-                                const dist = Math.sqrt(dx*dx + dy*dy);
-                                if (dist > 0) {
-                                    const pushX = (dx/dist) * 100;
-                                    const pushY = (dy/dist) * 100;
-                                     if (!this.checkMapCollision(this.player.x + pushX, this.player.y, this.player.width, this.player.height)) {
-                                        this.player.x += pushX;
-                                    }
-                                    if (!this.checkMapCollision(this.player.x, this.player.y + pushY, this.player.width, this.player.height)) {
-                                        this.player.y += pushY;
-                                    }
-                                }
+                                
+                                // FIX: Use Anti-Tunneling Knockback
+                                this.applyPlayerKnockback(hit.x, hit.y, 80);
                             }
                         } else {
                             // LAST PHASE - DIE FOR REAL
@@ -709,6 +692,32 @@ export class ImmortalisEngine {
 
         this.camera.x = camX;
         this.camera.y = camY;
+    }
+
+    // --- PHYSICS HELPERS ---
+    private applyPlayerKnockback(sourceX: number, sourceY: number, distance: number) {
+        const dx = this.player.x - sourceX;
+        const dy = this.player.y - sourceY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist === 0) return;
+
+        const dirX = dx / dist;
+        const dirY = dy / dist;
+        const stepSize = 5; // Small steps to prevent tunneling
+        const steps = Math.floor(distance / stepSize);
+
+        for (let i = 0; i < steps; i++) {
+            const nextX = this.player.x + dirX * stepSize;
+            if (!this.checkMapCollision(nextX, this.player.y, this.player.width, this.player.height)) {
+                this.player.x = nextX;
+            }
+            
+            const nextY = this.player.y + dirY * stepSize;
+            if (!this.checkMapCollision(this.player.x, nextY, this.player.width, this.player.height)) {
+                this.player.y = nextY;
+            }
+        }
     }
 
     private damagePlayer(amount: number) {
@@ -836,38 +845,8 @@ export class ImmortalisEngine {
             // 1. ENEMY/BOSS BARS
             if (e.type === 'ENEMY' && e.bossState !== 'HIDING' && e.bossState !== 'WAITING') {
                  if (e.isBoss) {
-                     // BOSS HP BAR (Larger, Phases)
-                     const barWidth = 64;
-                     const barHeight = 8;
-                     const xOffset = (barWidth - e.width) / 2;
-                     const yOffset = 16;
-
-                     // Determine Color based on Phase
-                     let hpColor = '#22c55e'; // Phase 1: Green
-                     if (e.phase === 2) hpColor = '#f97316'; // Phase 2: Orange
-                     if (e.phase === 3) hpColor = '#9333ea'; // Phase 3: Purple
-
-                     this.ctx.fillStyle = '#000';
-                     this.ctx.fillRect(e.x - xOffset, e.y - yOffset, barWidth, barHeight);
-                     
-                     this.ctx.fillStyle = hpColor;
-                     this.ctx.fillRect(e.x - xOffset, e.y - yOffset, barWidth * (e.hp/e.maxHp), barHeight);
-                     
-                     // Border
-                     this.ctx.strokeStyle = '#fff';
-                     this.ctx.lineWidth = 1;
-                     this.ctx.strokeRect(e.x - xOffset, e.y - yOffset, barWidth, barHeight);
-
-                     // Phase Indicators (dots)
-                     if (e.maxPhases && e.phase) {
-                         const remainingPhases = (e.maxPhases - e.phase) + 1; // 1 means current
-                         for(let i=0; i< e.maxPhases; i++) {
-                             this.ctx.fillStyle = i < remainingPhases ? hpColor : '#333';
-                             this.ctx.beginPath();
-                             this.ctx.arc(e.x - xOffset + (i * 10) + 4, e.y - yOffset - 4, 3, 0, Math.PI*2);
-                             this.ctx.fill();
-                         }
-                     }
+                     // NO DRAWING LOCAL BAR FOR BOSS
+                     // We handle this in the UI layer (bottom of render function)
                  } else {
                      // STANDARD ENEMY HP BAR
                      this.ctx.fillStyle = 'red';
@@ -899,6 +878,54 @@ export class ImmortalisEngine {
         });
 
         this.ctx.restore();
+
+        // --- UI OVERLAY (SCREEN SPACE) ---
+        // Render Boss UI if active
+        if (this.bossEncounterStarted) {
+            const boss = this.entities.find(e => e.isBoss && e.hp > 0);
+            if (boss) {
+                // Config
+                const barWidth = 400;
+                const barHeight = 20;
+                const x = (this.canvas.width / 2) - (barWidth / 2);
+                const y = 40;
+
+                // 1. Name Text
+                this.ctx.fillStyle = '#fff';
+                // Using standard monospace as fallback if font-pixel not loaded in canvas context yet
+                this.ctx.font = '24px "VT323", monospace'; 
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'bottom';
+                
+                const bossName = boss.id === 'loira_banheiro' ? "LOIRA DO BANHEIRO" : "UNKNOWN ENTITY";
+                this.ctx.fillText(bossName, this.canvas.width / 2, y - 8);
+                
+                // Reset Text Align
+                this.ctx.textAlign = 'left'; 
+                this.ctx.textBaseline = 'alphabetic';
+
+                // 2. Background Bar
+                this.ctx.fillStyle = '#1c1917'; // Dark Stone
+                this.ctx.fillRect(x, y, barWidth, barHeight);
+
+                // 3. Health Fill
+                // Color changes based on Phase (Green -> Orange -> Purple)
+                let hpColor = '#22c55e'; // Green
+                if (boss.phase === 2) hpColor = '#ea580c'; // Orange
+                if (boss.phase === 3) hpColor = '#9333ea'; // Purple
+
+                const hpPercent = Math.max(0, boss.hp / boss.maxHp);
+                this.ctx.fillStyle = hpColor;
+                this.ctx.fillRect(x, y, barWidth * hpPercent, barHeight);
+
+                // 4. Border
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x, y, barWidth, barHeight);
+                
+                // 5. Phase Indicators REMOVED for mystery
+            }
+        }
     }
 
     // --- ASSET LOADER WITH GITHUB FALLBACK ---
