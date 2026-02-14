@@ -44,6 +44,9 @@ interface Entity {
     lastDashTime?: number;    // Dash cooldown
     isDashing?: boolean;      // Is currently dashing?
     dashDuration?: number;    // How long left in dash
+    
+    // Player Specific
+    lastDamageTime?: number;  // Invulnerability frame tracker
 }
 
 // --- ENGINE CORE ---
@@ -60,7 +63,7 @@ export class ImmortalisEngine {
     private entities: Entity[] = [];
     private camera: Point = { x: 0, y: 0 };
     private currentMission: Mission | null = null;
-    private zoom: number = 1.6;
+    private zoom: number = 1.8; // Zoomed in for the small room feel
 
     // Juice Effects (Screen Shake)
     private shakeX: number = 0;
@@ -68,9 +71,9 @@ export class ImmortalisEngine {
     private shakeDuration: number = 0;
     private shakeIntensity: number = 0;
     
-    // Map Data
-    private mapWidth = 50;
-    private mapHeight = 50;
+    // Map Data - REDUCED SIZE FOR CLAUSTROPHOBIC BATHROOM FEEL
+    private mapWidth = 24; 
+    private mapHeight = 18;
     private tileSize = 32;
     private tiles: number[][] = [];
     
@@ -98,10 +101,11 @@ export class ImmortalisEngine {
 
         const playerConfig = gameState.getPlayerConfig();
         
+        // Spawn Player in the middle-ish
         this.player = {
             id: 'player',
-            x: 400,
-            y: 300,
+            x: (this.mapWidth * this.tileSize) / 2,
+            y: (this.mapHeight * this.tileSize) / 2 + 100,
             width: 32, 
             height: 32,
             color: '#ef4444',
@@ -112,7 +116,8 @@ export class ImmortalisEngine {
             maxHp: playerConfig.baseStats.hp,
             spritePath: playerConfig.spritePath,
             spriteLoaded: false,
-            opacity: 1
+            opacity: 1,
+            lastDamageTime: 0
         };
 
         this.entities.push(this.player);
@@ -120,10 +125,14 @@ export class ImmortalisEngine {
         // Listen for DevChat events to modify entities in real-time
         eventBus.on(GameEvents.REQUEST_DEV_ACTION, this.handleDevAction);
 
+        // Spawn Boss near the top
+        const bossX = (this.mapWidth * this.tileSize) / 2;
+        const bossY = (this.mapHeight * this.tileSize) / 2 - 100;
+
         if (this.currentMission) {
-            this.spawnEnemy(600, 400, this.currentMission.bossId);
+            this.spawnEnemy(bossX, bossY, this.currentMission.bossId);
         } else {
-            this.spawnEnemy(600, 400, 'loira_banheiro');
+            this.spawnEnemy(bossX, bossY, 'loira_banheiro');
         }
 
         window.addEventListener('keydown', this.handleKeyDown);
@@ -135,6 +144,7 @@ export class ImmortalisEngine {
     private handleDevAction = (action: any) => {
         if (action.type === 'HEAL_PLAYER') {
             this.player.hp = this.player.maxHp;
+            eventBus.emit(GameEvents.PLAYER_HP_CHANGE, this.player.hp);
             this.triggerShake(0.2, 5);
         }
         if (action.type === 'KILL_ALL') {
@@ -221,9 +231,18 @@ export class ImmortalisEngine {
         if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) this.player.vx = -speed;
         if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) this.player.vx = speed;
 
+        const now = Date.now();
+
+        // PLAYER INVULNERABILITY BLINK
+        if (this.player.lastDamageTime && now - this.player.lastDamageTime < 1000) {
+            // Blinking effect
+            this.player.opacity = Math.floor(now / 100) % 2 === 0 ? 0.5 : 1;
+        } else {
+            this.player.opacity = 1;
+        }
+
         this.entities.forEach(entity => {
             if (entity.type === 'ENEMY') {
-                const now = Date.now();
                 const dx = this.player.x - entity.x;
                 const dy = this.player.y - entity.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
@@ -239,6 +258,14 @@ export class ImmortalisEngine {
                 entity.isScreaming = false;
                 entity.isDashing = false;
                 entity.opacity = 1;
+
+                // --- PLAYER DAMAGE LOGIC ---
+                // Check collision with player
+                if (entity.bossState !== 'HIDING' && entity.bossState !== 'TELEGRAPH') {
+                    if (this.checkEntityCollision(this.player, entity)) {
+                        this.damagePlayer(entity.damage || 10);
+                    }
+                }
 
                 // --- BOSS LOGIC: LOIRA DO BANHEIRO ---
                 if (entity.id === 'loira_banheiro') {
@@ -272,9 +299,6 @@ export class ImmortalisEngine {
                              entity.bossState = 'HIDING';
                              entity.stateTimer = 1.0; // Hide for 1s
                              entity.nextMirrorThreshold -= 0.2; // Next threshold
-                             
-                             // Teleport off-screen or just hide
-                             // We'll rely on opacity and state checks in render/collision
                          }
 
                          if (entity.bossState === 'HIDING') {
@@ -299,7 +323,7 @@ export class ImmortalisEngine {
                          }
 
                          if (entity.bossState === 'TELEGRAPH') {
-                             entity.opacity = 0.4; // Ghostly
+                             entity.opacity = 0.15; // VERY GHOSTLY (Requested)
                              entity.vx = 0;
                              entity.vy = 0;
                              entity.stateTimer -= dt;
@@ -331,6 +355,11 @@ export class ImmortalisEngine {
                         entity.dashDuration -= dt;
                         entity.isDashing = true;
                         
+                        // Dash deals damage if colliding
+                        if (this.checkEntityCollision(this.player, entity)) {
+                             this.damagePlayer((entity.damage || 10) * 1.5); // Dash hurts more
+                        }
+
                         if (entity.dashDuration <= 0) {
                             entity.bossState = 'NEUTRAL';
                         }
@@ -355,15 +384,14 @@ export class ImmortalisEngine {
                                 entity.lastSpecialTime = now;
                                 entity.isScreaming = true;
                                 this.triggerShake(0.5, 10);
+                                this.damagePlayer(5); // Sonic damage?
                                 
-                                // Knockback Player (FIXED: With Wall Collision Check)
+                                // Knockback Player
                                 const recoilX = (this.player.x - entity.x) / dist * 120;
                                 const recoilY = (this.player.y - entity.y) / dist * 120;
-                                
                                 const nextPlayerX = this.player.x + recoilX;
                                 const nextPlayerY = this.player.y + recoilY;
 
-                                // Check collisions for player before applying knockback
                                 if (!this.checkMapCollision(nextPlayerX, this.player.y, this.player.width, this.player.height)) {
                                     this.player.x = nextPlayerX;
                                 }
@@ -439,7 +467,6 @@ export class ImmortalisEngine {
                                 const dy = this.player.y - hit.y;
                                 const dist = Math.sqrt(dx*dx + dy*dy);
                                 if (dist > 0) {
-                                    // Safe push
                                     const pushX = (dx/dist) * 100;
                                     const pushY = (dy/dist) * 100;
                                      if (!this.checkMapCollision(this.player.x + pushX, this.player.y, this.player.width, this.player.height)) {
@@ -476,6 +503,27 @@ export class ImmortalisEngine {
         this.camera.y = this.player.y - (this.canvas.height / this.zoom) / 2;
     }
 
+    private damagePlayer(amount: number) {
+        const now = Date.now();
+        // 1 second invulnerability
+        if (this.player.lastDamageTime && now - this.player.lastDamageTime < 1000) {
+            return;
+        }
+
+        this.player.hp -= amount;
+        this.player.lastDamageTime = now;
+        this.triggerShake(0.3, 10);
+        
+        // Sync with UI
+        eventBus.emit(GameEvents.PLAYER_HP_CHANGE, this.player.hp);
+
+        if (this.player.hp <= 0) {
+            this.player.hp = 0;
+            eventBus.emit(GameEvents.GAME_OVER);
+            this.stop();
+        }
+    }
+
     private render() {
         this.ctx.fillStyle = '#000000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -492,6 +540,7 @@ export class ImmortalisEngine {
 
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
+                // Determine visibility for optimization
                 if (x >= startCol -1 && x <= endCol +1 && y >= startRow -1 && y <= endRow +1) {
                     const tile = this.tiles[y][x];
                     if (tile === 1) this.ctx.fillStyle = '#44403c'; 
@@ -576,6 +625,7 @@ export class ImmortalisEngine {
             }
 
             // --- HEALTH BARS ---
+            // 1. ENEMY/BOSS BARS
             if (e.type === 'ENEMY' && e.bossState !== 'HIDING') {
                  if (e.isBoss) {
                      // BOSS HP BAR (Larger, Phases)
@@ -617,6 +667,26 @@ export class ImmortalisEngine {
                      this.ctx.fillStyle = 'green';
                      this.ctx.fillRect(e.x, e.y - 8, 32 * (e.hp/e.maxHp), 4);
                  }
+            }
+
+            // 2. PLAYER HP BAR
+            if (e.type === 'PLAYER') {
+                const barWidth = 32;
+                const barHeight = 4;
+                const xOffset = 0;
+                const yOffset = 10;
+                
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(e.x, e.y - yOffset, barWidth, barHeight);
+                
+                // Blue color for player
+                this.ctx.fillStyle = '#3b82f6'; 
+                const hpPercent = Math.max(0, e.hp / e.maxHp);
+                this.ctx.fillRect(e.x, e.y - yOffset, barWidth * hpPercent, barHeight);
+                
+                this.ctx.strokeStyle = '#93c5fd';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(e.x, e.y - yOffset, barWidth, barHeight);
             }
         });
 
@@ -688,11 +758,15 @@ export class ImmortalisEngine {
 
         if (isBoss) {
             // Spawn Mirrors for Boss Fight (Phase 3 Prep)
-            // Placing them in corners/midpoints
+            // UPDATED: Tighter spread for the smaller room (24x18 tiles)
+            // Tile size 32. Room approx 768x576. 
+            // Walls are at index 0 and 23 (x), 0 and 17 (y)
             const mirrorLocs = [
-                {x: 200, y: 200}, {x: 1400, y: 200}, 
-                {x: 200, y: 1000}, {x: 1400, y: 1000},
-                {x: 800, y: 100}
+                {x: 64, y: 100},   // Left Wall Top
+                {x: 64, y: 400},   // Left Wall Bottom
+                {x: 670, y: 100},  // Right Wall Top
+                {x: 670, y: 400},  // Right Wall Bottom
+                {x: 350, y: 64}    // Top Center
             ];
             
             mirrorLocs.forEach(loc => {
