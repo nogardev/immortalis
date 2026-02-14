@@ -1,35 +1,44 @@
 import React, { useEffect, useRef } from 'react';
-import Phaser from 'phaser';
-import StartGame from '../game/main';
+import { ImmortalisEngine } from '../game/main';
 import { eventBus, GameEvents } from '../services/eventBus';
+import { Mission } from '../types';
 
 interface GameCanvasProps {
+    mission: Mission | null;
     onGameOver: () => void;
+    onMissionComplete: (result: any) => void;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ onGameOver }) => {
-    const gameInstanceRef = useRef<Phaser.Game | null>(null);
+const GameCanvas: React.FC<GameCanvasProps> = ({ mission, onGameOver, onMissionComplete }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const engineRef = useRef<ImmortalisEngine | null>(null);
 
     useEffect(() => {
-        // Avoid double initialization in React Strict Mode
-        if (gameInstanceRef.current === null) {
-            gameInstanceRef.current = StartGame('game-container');
-            
-            // Listen for events from Phaser
-            eventBus.on(GameEvents.GAME_OVER, onGameOver);
-        }
+        if (!canvasRef.current) return;
+
+        // Initialize Custom Engine with Mission Data
+        const engine = new ImmortalisEngine(canvasRef.current, mission || undefined);
+        engineRef.current = engine;
+        engine.start();
+
+        // Listen for events from Engine
+        eventBus.on(GameEvents.GAME_OVER, onGameOver);
+        eventBus.on(GameEvents.MISSION_COMPLETE, onMissionComplete);
 
         return () => {
-            if (gameInstanceRef.current) {
-                gameInstanceRef.current.destroy(true);
-                gameInstanceRef.current = null;
-                eventBus.off(GameEvents.GAME_OVER, onGameOver);
-            }
+            engine.stop();
+            eventBus.off(GameEvents.GAME_OVER, onGameOver);
+            eventBus.off(GameEvents.MISSION_COMPLETE, onMissionComplete);
         };
-    }, [onGameOver]);
+    }, [onGameOver, onMissionComplete, mission]);
 
     return (
-        <div id="game-container" className="rounded-lg overflow-hidden border-2 border-stone-700 shadow-2xl shadow-black" />
+        <canvas 
+            ref={canvasRef} 
+            width={800} 
+            height={600} 
+            className="rounded-lg overflow-hidden border-2 border-stone-700 shadow-2xl shadow-black bg-black"
+        />
     );
 }
 

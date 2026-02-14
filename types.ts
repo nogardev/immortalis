@@ -66,3 +66,11 @@ export interface ChatMessage {
   text: string;
   timestamp: Date;
 }
+
+export interface TileMapData {
+    width: number;
+    height: number;
+    tiles: number[][]; // 0 = floor, 1 = wall/collision
+    spawnX: number;
+    spawnY: number;
+}

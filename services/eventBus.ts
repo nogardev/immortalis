@@ -1,7 +1,27 @@
-import Phaser from 'phaser';
+type Listener = (...args: any[]) => void;
 
-// Simple event bus using Phaser's built-in events system mechanism independent of a specific scene
-export const eventBus = new Phaser.Events.EventEmitter();
+class EventEmitter {
+    private events: { [key: string]: Listener[] } = {};
+
+    on(event: string, listener: Listener) {
+        if (!this.events[event]) {
+            this.events[event] = [];
+        }
+        this.events[event].push(listener);
+    }
+
+    off(event: string, listenerToRemove: Listener) {
+        if (!this.events[event]) return;
+        this.events[event] = this.events[event].filter(l => l !== listenerToRemove);
+    }
+
+    emit(event: string, ...args: any[]) {
+        if (!this.events[event]) return;
+        this.events[event].forEach(listener => listener(...args));
+    }
+}
+
+export const eventBus = new EventEmitter();
 
 export enum GameEvents {
   PLAYER_HP_CHANGE = 'player-hp-change',
