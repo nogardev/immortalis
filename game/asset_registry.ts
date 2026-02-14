@@ -1,15 +1,19 @@
 // ==========================================
 // CENTRAL DE REGISTRO DE ASSETS
-// Edite este arquivo para registrar novas imagens.
-// O jogo usará esses caminhos como referência.
+// ==========================================
+// 🛡️ PROTECTED FILE: DO NOT OVERWRITE PATHS WITH PLACEHOLDERS.
+//
+// INSTRUÇÕES DE UPLOAD:
+// Salve suas imagens na pasta: public/assets/...
+// Exemplo: public/assets/sprites/player/idle.png
+//
+// No código abaixo, use apenas: 'assets/sprites/player/idle.png'
+// O sistema adicionará 'public/' automaticamente quando buscar do GitHub.
 // ==========================================
 
 export const ASSET_REGISTRY = {
     PLAYER: {
-        // O caminho deve ser relativo à pasta 'public'
-        // Exemplo: se o arquivo está em 'public/assets/sprites/player/idle.png',
-        // você pode colocar 'assets/sprites/player/idle.png' ou o caminho completo com 'public/'
-        IDLE: 'assets/sprites/player/idle.png',
+        IDLE: 'assets/sprites/player/idle.png', // Red Detective
     },
     WEAPONS: {
         REVOLVER: 'assets/sprites/weapons/revolver.png',
@@ -21,6 +25,7 @@ export const ASSET_REGISTRY = {
         WEREWOLF: 'assets/sprites/creatures/werewolf.png',
     },
     ILLUSTRATIONS: {
+        // Bestiary Sketches
         LOIRA_SKETCH: 'assets/bestiary/loira_sketch.png',
         CORPO_SECO_SKETCH: 'assets/bestiary/corpo_seco_sketch.png',
         WEREWOLF_SKETCH: 'assets/bestiary/werewolf_sketch.png'

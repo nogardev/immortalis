@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import GameCanvas from './components/GameCanvas';
 import DevChat from './components/DevChat';
 import Bestiary from './components/Bestiary';
@@ -16,6 +16,34 @@ const App: React.FC = () => {
   const [playerStats, setPlayerStats] = useState<PlayerStats>(INITIAL_PLAYER_STATS);
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [lastResult, setLastResult] = useState<{ victory: boolean } | null>(null);
+  
+  // Easter Egg State
+  const [showEngineTools, setShowEngineTools] = useState(true);
+  const [cheatBuffer, setCheatBuffer] = useState('');
+
+  // Handle "immortalis" cheat code
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        // Only active in MENU
+        if (currentView !== 'MENU') return;
+
+        const char = e.key.toLowerCase();
+        // Simple filter for letters
+        if (char.length === 1 && /[a-z]/.test(char)) {
+            setCheatBuffer(prev => {
+                const next = (prev + char).slice(-10); // 'immortalis' is 10 chars
+                if (next === 'immortalis') {
+                    setShowEngineTools(s => !s);
+                    return ''; // Reset buffer
+                }
+                return next;
+            });
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentView]);
 
   const handleStartMission = (mission: Mission) => {
     setActiveMission(mission);
@@ -94,18 +122,22 @@ const App: React.FC = () => {
               >
                 Bestiary
               </button>
-              <button 
-                onClick={() => setCurrentView('ENGINE')}
-                className="bg-stone-900 border border-stone-800 text-stone-500 hover:text-emerald-500 py-3 uppercase tracking-[0.2em] transition-colors"
-              >
-                Engine Tools
-              </button>
+              
+              {showEngineTools && (
+                  <button 
+                    onClick={() => setCurrentView('ENGINE')}
+                    className="bg-stone-900 border border-stone-800 text-stone-500 hover:text-emerald-500 py-3 uppercase tracking-[0.2em] transition-colors"
+                  >
+                    Engine Tools
+                  </button>
+              )}
+              
               <button disabled className="bg-stone-900 border border-stone-800 text-stone-600 py-3 uppercase tracking-[0.2em] cursor-not-allowed">
                 Quit
               </button>
             </div>
             <div className="mt-12 text-xs text-stone-600 font-pixel">
-               BUILD: PROTOTYPE_0.1.5
+               BUILD: PROTOTYPE_0.1.6
             </div>
           </div>
         );
@@ -148,16 +180,18 @@ const App: React.FC = () => {
             
             <div className="h-px w-8 bg-stone-700 my-2"></div>
             
-             <button 
-               onClick={() => setCurrentView('ENGINE')}
-               className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${currentView === 'ENGINE' ? 'bg-emerald-900 text-white' : 'text-emerald-700/50 hover:bg-stone-800 hover:text-emerald-500'}`}
-               title="Engine Tools"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
+            {showEngineTools && (
+                 <button 
+                   onClick={() => setCurrentView('ENGINE')}
+                   className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${currentView === 'ENGINE' ? 'bg-emerald-900 text-white' : 'text-emerald-700/50 hover:bg-stone-800 hover:text-emerald-500'}`}
+                   title="Engine Tools"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+            )}
          </div>
       )}
 

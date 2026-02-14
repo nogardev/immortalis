@@ -22,9 +22,9 @@ const EngineDashboard: React.FC = () => {
             <div className="h-12 bg-[#2d2d2d] border-b border-[#3d3d3d] flex items-center px-4 justify-between select-none">
                 <div className="flex items-center gap-2">
                     <span className="font-bold text-gray-400 text-sm">IMMORTALIS ENGINE</span>
-                    <span className="bg-[#3d3d3d] px-2 py-0.5 rounded text-[10px] text-emerald-500">v0.1.5</span>
+                    <span className="bg-[#3d3d3d] px-2 py-0.5 rounded text-[10px] text-emerald-500">v0.1.7</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${mode === 'GITHUB' ? 'border-blue-500 text-blue-400' : 'border-emerald-500 text-emerald-400'}`}>
-                        {mode === 'GITHUB' ? '☁️ GITHUB' : '💻 LOCAL'}
+                        {mode === 'GITHUB' ? '☁️ GITHUB LINKED' : '💻 LOCAL ONLY'}
                     </span>
                 </div>
                 
@@ -54,14 +54,28 @@ const EngineDashboard: React.FC = () => {
             <div className="flex-1 overflow-hidden relative">
                 {view === 'DASHBOARD' && (
                     <div className="flex items-center justify-center h-full flex-col text-gray-500 gap-4">
-                        <div className="text-6xl opacity-20">⚙️</div>
-                        <p>Select a tool to begin editing.</p>
+                        <div className="text-6xl opacity-20">🛡️</div>
+                        <p>Secure Environment Active.</p>
+                        
+                        <div className="mt-4 p-4 border border-blue-900/50 rounded bg-blue-900/10 text-sm max-w-md text-center">
+                            <strong className="text-blue-400 block mb-2">GITHUB SYNC ACTIVE</strong>
+                            <p className="text-xs text-stone-400">
+                                The engine is configured to read assets directly from your repository:
+                                <br/>
+                                <span className="font-mono text-stone-500">nogardev/immortalis</span>
+                            </p>
+                            <p className="text-xs text-stone-400 mt-2">
+                                <strong>Your files are safe.</strong> Even if the AI Studio environment resets, 
+                                the game will load your sprites from GitHub.
+                            </p>
+                        </div>
+
                         <div className="mt-4 p-4 border border-stone-800 rounded bg-stone-900/50 text-sm max-w-md text-center">
-                            <p className="mb-2">Current Asset Source: <span className="font-bold text-white">{mode}</span></p>
+                            <p className="mb-2">Current Mode: <span className="font-bold text-white">{mode}</span></p>
                             <p className="text-xs">
                                 {mode === 'GITHUB' 
-                                    ? "Fetching assets from raw.githubusercontent.com. Use this if you have pushed your assets to the repo." 
-                                    : "Fetching assets from local '/public' folder. Use this for development inside AI Studio/WebContainers."}
+                                    ? "Reading from 'public/assets/' folder in your GitHub Main Branch." 
+                                    : "Reading from local temporary storage."}
                             </p>
                         </div>
                     </div>
@@ -93,8 +107,8 @@ const EngineDashboard: React.FC = () => {
                                             </button>
                                         </div>
                                         <p className="text-[10px] text-gray-500 mt-1">
-                                            Select <strong>LOCAL</strong> if you are editing files in the sidebar but haven't pushed to GitHub yet. 
-                                            Select <strong>GITHUB</strong> to see what players will see in production.
+                                            Keep this on <strong>GITHUB</strong> to ensure your sprites never disappear, 
+                                            as they are loaded from your permanent repository.
                                         </p>
                                     </div>
                                     
@@ -108,9 +122,6 @@ const EngineDashboard: React.FC = () => {
                                         >
                                             OPEN REPO SETTINGS ↗
                                         </a>
-                                        <p className="text-[10px] text-gray-500 mt-1 text-center">
-                                            Go here to make your repo <strong>Public</strong>.
-                                        </p>
                                     </div>
                                 </div>
                             </div>

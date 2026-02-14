@@ -17,13 +17,12 @@ const getIsRepoPublic = (): boolean => {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
             const parsed = JSON.parse(saved);
-            // Se o usuário explicitamente setou LOCAL, respeitamos. Caso contrário, GITHUB.
             return parsed.assetSourceMode !== 'LOCAL'; 
         }
     } catch (e) {
         // Fallback
     }
-    return true; // DEFAULT: GitHub Public Mode (Agora que o repo é público)
+    return true; // DEFAULT: GitHub Public Mode
 };
 
 export const IS_REPO_PUBLIC = getIsRepoPublic();
@@ -31,49 +30,39 @@ export const IS_REPO_PUBLIC = getIsRepoPublic();
 /**
  * RESOLVE ASSET PATH
  * Centraliza a lógica de carregamento de imagens.
+ * 
+ * PADRÃO: As imagens devem estar fisicamente em "public/assets/..."
+ * No código, referenciamos apenas como "assets/..."
  */
 export const resolveAssetPath = (path: string): string => {
     if (!path) return '';
     if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
 
-    // Normalização Inteligente:
-    // Remove barra inicial '/'
+    // Normalização: Remove barra inicial
     let cleanPath = path.startsWith('/') ? path.slice(1) : path;
     
-    // Se o usuário colou "public/assets/..." mas o Vite (Local) precisa de "assets/..."
-    // Ou se o GitHub precisa de "public/assets/..."
-    
+    // Se o caminho começar com "public/", removemos para evitar duplicidade na lógica abaixo,
+    // pois o Vite serve o conteudo de 'public' na raiz.
+    if (cleanPath.startsWith('public/')) {
+        cleanPath = cleanPath.replace(/^public\//, '');
+    }
+
     const useGitHub = IS_REPO_PUBLIC;
 
     if (useGitHub) {
-        // GITHUB RAW MODE
-        // O GitHub Raw PRECISA da pasta 'public' no caminho para este projeto específico
-        // baseado na estrutura vista: immortalis/public/assets/...
-        let repoPath = cleanPath;
-        
-        // Se o caminho NÃO começa com 'public/', adicionamos.
-        if (!repoPath.startsWith('public/')) {
-            repoPath = `public/${repoPath}`;
-        }
-        
-        return `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/${repoPath}`;
+        // GITHUB MODE:
+        // No GitHub, a estrutura de pastas é real. Precisamos apontar para /public/assets.
+        // cleanPath agora é algo como "assets/sprites/..."
+        return `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/public/${cleanPath}`;
     } else {
-        // LOCAL/VERCEL MODE
-        // O servidor de desenvolvimento serve a pasta 'public' na raiz.
-        // Logo, 'public/assets/img.png' deve ser acessado como '/assets/img.png'
-        
-        let servePath = cleanPath;
-        
-        // Se o caminho COMEÇA com 'public/', removemos para o modo local.
-        if (servePath.startsWith('public/')) {
-            servePath = servePath.replace(/^public\//, '');
-        }
-        
-        return `/${servePath}`;
+        // LOCAL MODE:
+        // O servidor dev serve a pasta 'public' na raiz URL.
+        // Logo, "public/assets/img.png" vira "/assets/img.png"
+        return `/${cleanPath}`;
     }
 };
 
-// Wrapper simples para usar nas definições abaixo
+// Wrapper simples
 const asset = (path: string) => path; 
 
 export const GITHUB_ASSET_BASE_URL = `https://raw.githubusercontent.com/${REPO_PATH}/${BRANCH}/public/`;
