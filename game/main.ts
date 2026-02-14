@@ -7,7 +7,8 @@ import { resolveAssetPath, GITHUB_ASSET_BASE_URL } from '../constants';
 interface Point { x: number; y: number; }
 
 type EntityType = 'PLAYER' | 'ENEMY' | 'PROJECTILE' | 'MIRROR';
-type BossState = 'NEUTRAL' | 'SCREAMING_TRANSITION' | 'HIDING' | 'TELEGRAPH' | 'DASHING' | 'STUNNED';
+// Added WAITING and INTRO to the state machine for the cinematic start
+type BossState = 'WAITING' | 'INTRO' | 'NEUTRAL' | 'SCREAMING_TRANSITION' | 'RETREATING' | 'HIDING' | 'TELEGRAPH' | 'DASHING' | 'STUNNED';
 
 interface Entity {
     id: string;
@@ -36,6 +37,8 @@ interface Entity {
     
     // Phase 3 Mechanics
     nextMirrorThreshold?: number; // 0.8, 0.6, 0.4, 0.2
+    targetX?: number; // Locking target for stable movement
+    targetY?: number;
     
     // Abilities
     lastSpecialTime?: number; // Scream cooldown
@@ -63,7 +66,10 @@ export class ImmortalisEngine {
     private entities: Entity[] = [];
     private camera: Point = { x: 0, y: 0 };
     private currentMission: Mission | null = null;
-    private zoom: number = 1.8; // Zoomed in for the small room feel
+    private zoom: number = 2.2; // Claustrophobic Zoom
+
+    // Encounter State
+    private bossEncounterStarted: boolean = false;
 
     // Juice Effects (Screen Shake)
     private shakeX: number = 0;
@@ -71,9 +77,9 @@ export class ImmortalisEngine {
     private shakeDuration: number = 0;
     private shakeIntensity: number = 0;
     
-    // Map Data - REDUCED SIZE FOR CLAUSTROPHOBIC BATHROOM FEEL
-    private mapWidth = 24; 
-    private mapHeight = 18;
+    // Map Data - Custom Layout
+    private mapWidth = 12; // Back to original width
+    private mapHeight = 20; // Room (10) + Corridor (10)
     private tileSize = 32;
     private tiles: number[][] = [];
     
@@ -89,23 +95,36 @@ export class ImmortalisEngine {
         this.ctx.imageSmoothingEnabled = false; 
         this.currentMission = mission || null;
 
-        // Initialize Map
+        // Initialize Map (1 = Wall, 0 = Floor)
+        // Design: Room 12x10 at top, long corridor 2x10 at bottom
         for(let y=0; y<this.mapHeight; y++) {
             const row = [];
             for(let x=0; x<this.mapWidth; x++) {
-                if(x===0 || x===this.mapWidth-1 || y===0 || y===this.mapHeight-1) row.push(1);
-                else row.push(0);
+                let isFloor = false;
+
+                // Room Area (Top) - y: 1 to 9 (9 tiles high interior)
+                if (y >= 1 && y <= 9 && x >= 1 && x <= 10) {
+                    isFloor = true;
+                }
+
+                // Corridor Area (Bottom Center) - y: 10 to 18
+                // Center of 12 is 6. Corridor width 2 tiles (5 & 6)
+                if (y >= 10 && y <= 18 && (x === 5 || x === 6)) {
+                    isFloor = true;
+                }
+
+                row.push(isFloor ? 0 : 1);
             }
             this.tiles.push(row);
         }
 
         const playerConfig = gameState.getPlayerConfig();
         
-        // Spawn Player in the middle-ish
+        // Spawn Player at the bottom of the corridor
         this.player = {
             id: 'player',
-            x: (this.mapWidth * this.tileSize) / 2,
-            y: (this.mapHeight * this.tileSize) / 2 + 100,
+            x: 5.5 * this.tileSize - 16, // Centered in corridor (tile 5.5)
+            y: 18 * this.tileSize,       // Bottom of map floor
             width: 32, 
             height: 32,
             color: '#ef4444',
@@ -125,9 +144,11 @@ export class ImmortalisEngine {
         // Listen for DevChat events to modify entities in real-time
         eventBus.on(GameEvents.REQUEST_DEV_ACTION, this.handleDevAction);
 
-        // Spawn Boss near the top
-        const bossX = (this.mapWidth * this.tileSize) / 2;
-        const bossY = (this.mapHeight * this.tileSize) / 2 - 100;
+        // Spawn Boss - PREPARE FOR CINEMATIC
+        // The boss starts in the TOP CENTER MIRROR
+        // Top Center Mirror is at {x: 176, y: 32} based on mirrorLocs below
+        const bossX = 176;
+        const bossY = 32;
 
         if (this.currentMission) {
             this.spawnEnemy(bossX, bossY, this.currentMission.bossId);
@@ -233,6 +254,33 @@ export class ImmortalisEngine {
 
         const now = Date.now();
 
+        // --- BOSS ENCOUNTER TRIGGER LOGIC ---
+        // Room entrance is at Y=10. Player starts at Y=18.
+        // We trigger ONLY when player is deeply inside the room (Y < 8.0)
+        // 8.0 * 32 = 256. Door is at 320. 
+        // This gives ~64 pixels of clearance, ensuring player isn't stuck in the wall.
+        if (!this.bossEncounterStarted && this.player.y < 8.0 * this.tileSize) {
+            this.bossEncounterStarted = true;
+            
+            // 1. Close the Doors (Wall at y=10, x=5 & x=6)
+            this.tiles[10][5] = 1;
+            this.tiles[10][6] = 1;
+            
+            this.triggerShake(0.5, 10); // Slam effect
+
+            // 2. Wake up the Boss
+            const boss = this.entities.find(e => e.id === 'loira_banheiro');
+            if (boss) {
+                boss.bossState = 'INTRO';
+                boss.stateTimer = 2.0; // Cinematic duration
+                boss.opacity = 0; // Start invisible, fade in during intro
+                // Center boss on top mirror exactly
+                boss.x = 176; 
+                boss.y = 32;
+            }
+        }
+
+
         // PLAYER INVULNERABILITY BLINK
         if (this.player.lastDamageTime && now - this.player.lastDamageTime < 1000) {
             // Blinking effect
@@ -252,24 +300,79 @@ export class ImmortalisEngine {
                 if (!entity.lastDashTime) entity.lastDashTime = now;
                 if (!entity.dashDuration) entity.dashDuration = 0;
                 if (!entity.stateTimer) entity.stateTimer = 0;
+                
+                // CRITICAL FIX: Do not default to NEUTRAL if we are in a special setup state like WAITING
+                // We rely on the bossState set during spawn or logic.
                 if (!entity.bossState) entity.bossState = 'NEUTRAL';
                 
                 // Reset visuals
                 entity.isScreaming = false;
                 entity.isDashing = false;
-                entity.opacity = 1;
-
+                
                 // --- PLAYER DAMAGE LOGIC ---
                 // Check collision with player
-                if (entity.bossState !== 'HIDING' && entity.bossState !== 'TELEGRAPH') {
-                    if (this.checkEntityCollision(this.player, entity)) {
-                        this.damagePlayer(entity.damage || 10);
-                    }
+                const ghostStates = ['HIDING', 'RETREATING', 'TELEGRAPH', 'WAITING', 'INTRO'];
+                if (!ghostStates.includes(entity.bossState!)) {
+                     // Only solid during Neutral, Dash, or Transition
+                     if (entity.opacity && entity.opacity > 0.5) { // Simple check to ensure we don't hit ghost
+                        if (this.checkEntityCollision(this.player, entity)) {
+                            this.damagePlayer(entity.damage || 10);
+                        }
+                     }
+                }
+                
+                // Reset Opacity Default if not in special state
+                const defaultOpacityStates = ['NEUTRAL', 'DASHING', 'SCREAMING_TRANSITION'];
+                if (defaultOpacityStates.includes(entity.bossState!)) {
+                    entity.opacity = 1;
                 }
 
                 // --- BOSS LOGIC: LOIRA DO BANHEIRO ---
                 if (entity.id === 'loira_banheiro') {
                     
+                    // 0. WAITING / INTRO STATES
+                    if (entity.bossState === 'WAITING') {
+                        // FORCE IMMOBILITY
+                        entity.vx = 0; 
+                        entity.vy = 0;
+                        entity.opacity = 0; // Completely Invisible
+                        
+                        // Force position to top mirror (in case physics moved her)
+                        entity.x = 176;
+                        entity.y = 32;
+                        return; // CRITICAL: Return early so no AI logic runs
+                    }
+
+                    if (entity.bossState === 'INTRO') {
+                        entity.vx = 0; 
+                        entity.vy = 0;
+                        entity.stateTimer -= dt;
+                        
+                        // Fade In Effect (0 to 1)
+                        // timer goes 2.0 -> 0.0. 
+                        // opacity = 1 - (timer/2)
+                        entity.opacity = Math.max(0, Math.min(1, 1 - (entity.stateTimer / 2.0)));
+
+                        if (entity.stateTimer <= 0) {
+                            // INTRO FINISHED -> DASH START
+                            entity.bossState = 'DASHING';
+                            entity.dashDuration = 0.6; // Long dash intro
+                            entity.opacity = 1;
+                            
+                            // Calculate Dash Vector towards Player
+                            const introDx = this.player.x - entity.x;
+                            const introDy = this.player.y - entity.y;
+                            const introDist = Math.sqrt(introDx*introDx + introDy*introDy);
+                            
+                            const dashSpeed = 600;
+                            entity.vx = (introDx / introDist) * dashSpeed;
+                            entity.vy = (introDy / introDist) * dashSpeed;
+                            
+                            this.triggerShake(0.3, 8); // Roar effect
+                        }
+                        return;
+                    }
+
                     // 1. HANDLE TRANSITION STATE (SCREAMING BETWEEN PHASES)
                     if (entity.bossState === 'SCREAMING_TRANSITION') {
                         entity.vx = 0;
@@ -295,29 +398,107 @@ export class ImmortalisEngine {
                     if (entity.phase === 3) {
                          // CHECK HP THRESHOLD (80%, 60%, 40%, 20%)
                          const hpPercent = entity.hp / entity.maxHp;
-                         if (entity.bossState === 'NEUTRAL' && entity.nextMirrorThreshold && hpPercent <= entity.nextMirrorThreshold) {
-                             entity.bossState = 'HIDING';
-                             entity.stateTimer = 1.0; // Hide for 1s
+                         if (entity.bossState === 'NEUTRAL' && entity.nextMirrorThreshold !== undefined && hpPercent <= entity.nextMirrorThreshold) {
+                             // TRIGGER RETREAT INSTEAD OF INSTANT HIDE
+                             entity.bossState = 'RETREATING';
                              entity.nextMirrorThreshold -= 0.2; // Next threshold
+                             
+                             // Clear any previous targets to force a new calculation
+                             entity.targetX = undefined;
+                             entity.targetY = undefined;
                          }
 
+                         // STATE: RETREATING (Dash to nearest mirror)
+                         if (entity.bossState === 'RETREATING') {
+                             entity.opacity = 0.5; // Visual cue that she is ghosting
+                             
+                             // LOCK TARGET: Only calculate "closest mirror" once.
+                             // If we recalc every frame, she jitters between 2 mirrors.
+                             if (entity.targetX === undefined || entity.targetY === undefined) {
+                                 const mirrors = this.entities.filter(e => e.type === 'MIRROR');
+                                 let closest = null;
+                                 let minDist = Infinity;
+                                 
+                                 mirrors.forEach(m => {
+                                     const mDx = m.x - entity.x;
+                                     const mDy = m.y - entity.y;
+                                     const mDist = Math.sqrt(mDx*mDx + mDy*mDy);
+                                     if (mDist < minDist) {
+                                         minDist = mDist;
+                                         closest = m;
+                                     }
+                                 });
+                                 
+                                 if (closest) {
+                                     entity.targetX = closest.x;
+                                     entity.targetY = closest.y;
+                                 } else {
+                                     // Fallback if no mirrors
+                                     entity.bossState = 'HIDING';
+                                     entity.stateTimer = 1.0;
+                                     return; 
+                                 }
+                             }
+
+                             // Move towards the locked target
+                             const moveDx = entity.targetX - entity.x;
+                             const moveDy = entity.targetY - entity.y;
+                             const distToTarget = Math.sqrt(moveDx*moveDx + moveDy*moveDy);
+
+                             if (distToTarget < 15) {
+                                 // Arrived at Mirror
+                                 entity.x = entity.targetX;
+                                 entity.y = entity.targetY;
+                                 entity.vx = 0;
+                                 entity.vy = 0;
+                                 entity.bossState = 'HIDING';
+                                 entity.stateTimer = 1.2; // Stay in mirror fading out for 1.2s
+                                 entity.opacity = 0.6; // Start ghostly
+                                 
+                                 // Clear target for next time
+                                 entity.targetX = undefined;
+                                 entity.targetY = undefined;
+                             } else {
+                                 // Dash towards it
+                                 const dashSpeed = 450;
+                                 entity.vx = (moveDx / distToTarget) * dashSpeed;
+                                 entity.vy = (moveDy / distToTarget) * dashSpeed;
+                             }
+                             // NO RETURN: Allow physics to update position
+                         }
+
+                         // STATE: HIDING (Fade out inside mirror)
                          if (entity.bossState === 'HIDING') {
-                             entity.opacity = 0;
                              entity.vx = 0;
                              entity.vy = 0;
                              entity.stateTimer -= dt;
                              
+                             // Fade logic: Linear fade from 0.6 to 0
+                             // Normalized timer goes from 1.0 to 0.0
+                             // Opacity = Normalized * 0.6
+                             const normalized = Math.max(0, entity.stateTimer / 1.2); 
+                             entity.opacity = normalized * 0.6; 
+                             
                              if (entity.stateTimer <= 0) {
-                                 // Pick random mirror
+                                 // TELEPORT: Pick RANDOM mirror (excluding the one we are currently at)
                                  const mirrors = this.entities.filter(e => e.type === 'MIRROR');
                                  if (mirrors.length > 0) {
-                                     const targetMirror = mirrors[Math.floor(Math.random() * mirrors.length)];
-                                     entity.x = targetMirror.x;
-                                     entity.y = targetMirror.y;
+                                     // Filter out current mirror to force movement
+                                     const availableMirrors = mirrors.filter(m => 
+                                         Math.abs(m.x - entity.x) > 10 || Math.abs(m.y - entity.y) > 10
+                                     );
+                                     
+                                     // If only 1 mirror exists, we stay. Otherwise pick random from others.
+                                     const candidates = availableMirrors.length > 0 ? availableMirrors : mirrors;
+                                     const randomMirror = candidates[Math.floor(Math.random() * candidates.length)];
+                                     
+                                     entity.x = randomMirror.x;
+                                     entity.y = randomMirror.y;
                                  }
                                  
                                  entity.bossState = 'TELEGRAPH';
-                                 entity.stateTimer = 1.5; // Telegraph time
+                                 entity.stateTimer = 1.0; // Telegraph time
+                                 entity.opacity = 0.15; // Reappear very faint
                              }
                              return;
                          }
@@ -425,24 +606,43 @@ export class ImmortalisEngine {
                 }
             }
 
-            // Apply Velocity
+            // Apply Velocity with Wall Collision Checks
             const nextX = entity.x + entity.vx * dt;
             const nextY = entity.y + entity.vy * dt;
 
-            if (!this.checkMapCollision(nextX, entity.y, entity.width, entity.height)) {
+            // FIX: Allow RETREATING/INTRO boss to ignore walls (noclip) to reach mirrors
+            const ignoreWalls = entity.bossState === 'RETREATING' || entity.bossState === 'HIDING' || entity.bossState === 'INTRO' || entity.bossState === 'WAITING';
+
+            // X Axis Check
+            if (ignoreWalls || !this.checkMapCollision(nextX, entity.y, entity.width, entity.height)) {
                 entity.x = nextX;
+            } else {
+                // If Projectile hits wall, destroy it
+                if (entity.type === 'PROJECTILE') entity.hp = 0;
             }
-            if (!this.checkMapCollision(entity.x, nextY, entity.width, entity.height)) {
+
+            // Y Axis Check
+            if (ignoreWalls || !this.checkMapCollision(entity.x, nextY, entity.width, entity.height)) {
                 entity.y = nextY;
+            } else {
+                 // If Projectile hits wall, destroy it
+                 if (entity.type === 'PROJECTILE') entity.hp = 0;
             }
         });
 
         this.entities = this.entities.filter(entity => {
             if (entity.type === 'PROJECTILE') {
-                // Ignore Boss if she is hiding in mirror
+                
+                // Cleanup bullets that hit walls (handled in update loop)
+                if (entity.hp <= 0) return false;
+
+                // Ignore Boss if she is hiding or retreating to mirror
+                // Bullets should pass through if she is "ghostly" (optional, but feels fair if she is entering mirror)
+                const isGhostly = (e: Entity) => e.bossState === 'HIDING' || e.bossState === 'RETREATING' || e.bossState === 'WAITING' || e.bossState === 'INTRO';
+
                 const hit = this.entities.find(e => 
                     e.type === 'ENEMY' && 
-                    e.bossState !== 'HIDING' && // Can't hit while hiding
+                    !isGhostly(e) && // Can't hit while hiding/retreating
                     this.checkEntityCollision(entity, e)
                 );
                 
@@ -499,8 +699,16 @@ export class ImmortalisEngine {
             return true;
         });
 
-        this.camera.x = this.player.x - (this.canvas.width / this.zoom) / 2;
-        this.camera.y = this.player.y - (this.canvas.height / this.zoom) / 2;
+        // Center camera on the player, but clamp to map bounds
+        let camX = this.player.x - (this.canvas.width / this.zoom / 2);
+        let camY = this.player.y - (this.canvas.height / this.zoom / 2);
+        
+        // Clamp Camera
+        camX = Math.max(0, Math.min(camX, (this.mapWidth * this.tileSize) - (this.canvas.width / this.zoom)));
+        camY = Math.max(0, Math.min(camY, (this.mapHeight * this.tileSize) - (this.canvas.height / this.zoom)));
+
+        this.camera.x = camX;
+        this.camera.y = camY;
     }
 
     private damagePlayer(amount: number) {
@@ -533,10 +741,10 @@ export class ImmortalisEngine {
         // Apply Camera + Screen Shake
         this.ctx.translate(-this.camera.x + this.shakeX, -this.camera.y + this.shakeY);
 
-        const startCol = Math.floor(this.camera.x / this.tileSize);
-        const endCol = startCol + (this.canvas.width / this.zoom / this.tileSize) + 1;
-        const startRow = Math.floor(this.camera.y / this.tileSize);
-        const endRow = startRow + (this.canvas.height / this.zoom / this.tileSize) + 1;
+        const startCol = 0;
+        const endCol = this.mapWidth;
+        const startRow = 0;
+        const endRow = this.mapHeight;
 
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
@@ -626,7 +834,7 @@ export class ImmortalisEngine {
 
             // --- HEALTH BARS ---
             // 1. ENEMY/BOSS BARS
-            if (e.type === 'ENEMY' && e.bossState !== 'HIDING') {
+            if (e.type === 'ENEMY' && e.bossState !== 'HIDING' && e.bossState !== 'WAITING') {
                  if (e.isBoss) {
                      // BOSS HP BAR (Larger, Phases)
                      const barWidth = 64;
@@ -730,8 +938,15 @@ export class ImmortalisEngine {
             }
         };
 
-        img.src = finalPath;
+        // CACHE BUSTING FIX:
+        // GitHub Raw files are heavily cached by browsers. Since the user might update an asset 
+        // with the same name, we append a timestamp query param to external URLs to force a fresh load
+        // every time the game session starts.
+        const srcToLoad = finalPath.startsWith('http') ? `${finalPath}?v=${Date.now()}` : finalPath;
+        img.src = srcToLoad;
         
+        // We cache using the original 'finalPath' key, so we don't redownload every frame, 
+        // only once per game load.
         this.imageCache.set(finalPath, img);
         return img;
     }
@@ -747,26 +962,31 @@ export class ImmortalisEngine {
         let isBoss = false;
         let phases = 1;
         let currentHp = hp;
+        // Boss starts in WAITING state if it's the specific encounter
+        let initialState: BossState = 'NEUTRAL'; 
 
+        // Generic Boss Check
         if (creatureData?.maxPhases && creatureData.maxPhases > 1) {
             isBoss = true;
             phases = creatureData.maxPhases;
-        } else if (creatureId === 'loira_banheiro') {
+        }
+
+        // Specific Boss Override (Fixed Priority)
+        if (creatureId === 'loira_banheiro') {
             isBoss = true;
             phases = 3; 
+            initialState = 'WAITING'; // Start waiting for cinematic
         }
 
         if (isBoss) {
             // Spawn Mirrors for Boss Fight (Phase 3 Prep)
-            // UPDATED: Tighter spread for the smaller room (24x18 tiles)
-            // Tile size 32. Room approx 768x576. 
-            // Walls are at index 0 and 23 (x), 0 and 17 (y)
+            // UPDATED: Extremely Tight Spread for 12x10 Room (restored from backup)
             const mirrorLocs = [
-                {x: 64, y: 100},   // Left Wall Top
-                {x: 64, y: 400},   // Left Wall Bottom
-                {x: 670, y: 100},  // Right Wall Top
-                {x: 670, y: 400},  // Right Wall Bottom
-                {x: 350, y: 64}    // Top Center
+                {x: 32, y: 64},    // Left Wall Top
+                {x: 32, y: 224},   // Left Wall Bottom
+                {x: 320, y: 64},   // Right Wall Top
+                {x: 320, y: 224},  // Right Wall Bottom
+                {x: 176, y: 32}    // Top Center
             ];
             
             mirrorLocs.forEach(loc => {
@@ -795,7 +1015,7 @@ export class ImmortalisEngine {
             spritePath: spritePath,
             spriteLoaded: false,
             isBoss: isBoss,
-            bossState: 'NEUTRAL',
+            bossState: initialState,
             phase: 1,
             maxPhases: phases,
             nextMirrorThreshold: 0.8 // 80% HP
