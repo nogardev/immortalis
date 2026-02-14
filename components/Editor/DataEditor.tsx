@@ -7,19 +7,19 @@ import { getAllRegisteredAssets } from '../../game/asset_registry';
 // --- MOCK ASSET FILE SYSTEM ---
 const INITIAL_ASSETS = {
     sprites: [
-        'assets/sprites/creatures/loira_idle.png',
-        'assets/sprites/creatures/corpo_seco.png',
-        'assets/sprites/creatures/werewolf.png',
-        'assets/sprites/weapons/revolver.png',
-        'assets/sprites/weapons/whip.png',
-        'assets/sprites/player/idle.png'
+        'game_assets/sprites/creatures/loira_idle.png',
+        'game_assets/sprites/creatures/corpo_seco.png',
+        'game_assets/sprites/creatures/werewolf.png',
+        'game_assets/sprites/weapons/revolver.png',
+        'game_assets/sprites/weapons/whip.png',
+        'game_assets/sprites/player/idle.png'
     ],
     illustrations: [
         'https://picsum.photos/256/256?grayscale',
         'https://picsum.photos/256/256?sepia',
         'https://picsum.photos/256/256',
-        'assets/bestiary/loira_sketch.png',
-        'assets/bestiary/corpo_seco_sketch.png'
+        'game_assets/bestiary/loira_sketch.png',
+        'game_assets/bestiary/corpo_seco_sketch.png'
     ]
 };
 
@@ -127,7 +127,7 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                                 type="text" 
                                 value={customUrl}
                                 onChange={(e) => setCustomUrl(e.target.value)}
-                                placeholder="Paste link (public/assets/...)"
+                                placeholder="Paste link (public/game_assets/...)"
                                 className="flex-1 bg-[#0a0a0a] border border-[#333] rounded px-3 py-1.5 text-xs text-stone-200 focus:border-emerald-500 focus:outline-none font-mono"
                             />
                             <button 

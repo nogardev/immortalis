@@ -120,13 +120,15 @@ dist
 # ==========================================
 # 🛡️ PROTEÇÃO DE ASSETS (IMMORTALIS)
 # ==========================================
-# Impede que o ambiente local (AI Studio) delete imagens 
-# que existem no GitHub mas não foram baixadas aqui.
-public/assets/**/*.png
-public/assets/**/*.jpg
-public/assets/**/*.jpeg
-public/assets/**/*.gif
-public/assets/**/*.webp
+# Ignora a pasta antiga para evitar conflitos
+public/assets/
 
-# Mantém a estrutura de pastas, apenas ignora os binários
-!public/assets/**/.keep
+# PASTA SEGURA: game_assets
+# 1. Ignora TUDO dentro de game_assets (imagens, etc)
+public/game_assets/*
+
+# 2. Mas permite subpastas
+!public/game_assets/**/
+
+# 3. E permite explicitamente READMEs para manter a estrutura de pastas no Git
+!public/game_assets/**/README.md

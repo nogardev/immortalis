@@ -3,32 +3,34 @@
 // ==========================================
 // 🛡️ PROTECTED FILE: DO NOT OVERWRITE PATHS WITH PLACEHOLDERS.
 //
-// INSTRUÇÕES DE UPLOAD:
-// Salve suas imagens na pasta: public/assets/...
-// Exemplo: public/assets/sprites/player/idle.png
+// INSTRUÇÕES DE UPLOAD (ATUALIZADO):
+// Salve suas imagens na NOVA PASTA SEGURA no GitHub:
+// 📂 public/game_assets/...
 //
-// No código abaixo, use apenas: 'assets/sprites/player/idle.png'
-// O sistema adicionará 'public/' automaticamente quando buscar do GitHub.
+// Exemplo: public/game_assets/sprites/player/idle.png
+//
+// Motivo: A pasta antiga 'assets' causava conflitos de sincronização.
+// A pasta 'game_assets' é ignorada localmente, protegendo seus arquivos no GitHub.
 // ==========================================
 
 export const ASSET_REGISTRY = {
     PLAYER: {
-        IDLE: 'assets/sprites/player/idle.png', // Red Detective
+        IDLE: 'game_assets/sprites/player/idle.png', // Red Detective
     },
     WEAPONS: {
-        REVOLVER: 'assets/sprites/weapons/revolver.png',
-        WHIP: 'assets/sprites/weapons/whip.png',
+        REVOLVER: 'game_assets/sprites/weapons/revolver.png',
+        WHIP: 'game_assets/sprites/weapons/whip.png',
     },
     CREATURES: {
-        LOIRA_IDLE: 'assets/sprites/creatures/loira_idle.png',
-        CORPO_SECO: 'assets/sprites/creatures/corpo_seco.png',
-        WEREWOLF: 'assets/sprites/creatures/werewolf.png',
+        LOIRA_IDLE: 'game_assets/sprites/creatures/loira_idle.png',
+        CORPO_SECO: 'game_assets/sprites/creatures/corpo_seco.png',
+        WEREWOLF: 'game_assets/sprites/creatures/werewolf.png',
     },
     ILLUSTRATIONS: {
         // Bestiary Sketches
-        LOIRA_SKETCH: 'assets/bestiary/loira_sketch.png',
-        CORPO_SECO_SKETCH: 'assets/bestiary/corpo_seco_sketch.png',
-        WEREWOLF_SKETCH: 'assets/bestiary/werewolf_sketch.png'
+        LOIRA_SKETCH: 'game_assets/bestiary/loira_sketch.png',
+        CORPO_SECO_SKETCH: 'game_assets/bestiary/corpo_seco_sketch.png',
+        WEREWOLF_SKETCH: 'game_assets/bestiary/werewolf_sketch.png'
     }
 };
 
