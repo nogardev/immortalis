@@ -6,7 +6,7 @@ import MissionBoard from './components/MissionBoard';
 import CharacterSheet from './components/CharacterSheet';
 import EngineDashboard from './components/Editor/EngineDashboard';
 import ResultScreen from './components/ResultScreen';
-import { INITIAL_PLAYER_STATS } from './constants';
+import { INITIAL_PLAYER_STATS, ENABLE_DEV_TOOLS } from './constants';
 import { PlayerStats, Mission } from './types';
 
 type View = 'MENU' | 'GAME' | 'BESTIARY' | 'MISSIONS' | 'ENGINE' | 'RESULT';
@@ -17,8 +17,8 @@ const App: React.FC = () => {
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [lastResult, setLastResult] = useState<{ victory: boolean } | null>(null);
   
-  // Easter Egg State
-  const [showEngineTools, setShowEngineTools] = useState(true);
+  // Easter Egg State (Controlled by ENABLE_DEV_TOOLS constant initially)
+  const [showEngineTools, setShowEngineTools] = useState(ENABLE_DEV_TOOLS);
   const [cheatBuffer, setCheatBuffer] = useState('');
 
   // Handle "immortalis" cheat code
@@ -137,7 +137,7 @@ const App: React.FC = () => {
               </button>
             </div>
             <div className="mt-12 text-xs text-stone-600 font-pixel">
-               BUILD: PROTOTYPE_0.1.6
+               BUILD: PROTOTYPE_0.1.7
             </div>
           </div>
         );
@@ -206,10 +206,12 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Right Sidebar: AI DEV (Always visible) */}
-      <div className="h-full border-l border-stone-800 z-40 shadow-xl">
-        <DevChat />
-      </div>
+      {/* Right Sidebar: AI DEV (Only visible if Tools Enabled) */}
+      {showEngineTools && (
+        <div className="h-full border-l border-stone-800 z-40 shadow-xl transition-all duration-300">
+            <DevChat />
+        </div>
+      )}
     </div>
   );
 }

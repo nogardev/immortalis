@@ -202,6 +202,7 @@ type EditorTab = 'CREATURES' | 'WEAPONS' | 'PLAYER';
 const DataEditor: React.FC = () => {
     const [activeTab, setActiveTab] = useState<EditorTab>('CREATURES');
     const [notification, setNotification] = useState<Notification | null>(null);
+    const [showExportModal, setShowExportModal] = useState(false);
     
     // Local state to handle edits before saving
     const [creatures, setCreatures] = useState<Creature[]>(gameState.getCreatures());
@@ -271,6 +272,14 @@ const DataEditor: React.FC = () => {
             gameState.updatePlayerConfig(playerConfig);
             showNotification(`Player Config saved to LocalStorage.`);
         }
+    };
+
+    const handleExport = () => {
+        // Generate the constants.ts file content
+        const creaturesData = JSON.stringify(creatures, null, 2);
+        // Note: We need to clean the JSON to match Typescript variable format roughly, 
+        // or just give the user the array content.
+        setShowExportModal(true);
     };
 
     const handleFileUpload = (file: File) => {
@@ -367,6 +376,39 @@ const DataEditor: React.FC = () => {
                 </div>
             )}
 
+            {/* Export Modal */}
+            {showExportModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur">
+                    <div className="bg-[#1a1a1a] border border-stone-600 rounded-lg w-[800px] h-[600px] flex flex-col shadow-2xl">
+                         <div className="p-4 border-b border-stone-700 flex justify-between items-center bg-[#2d2d2d]">
+                             <h3 className="font-bold text-emerald-400">DATA EXPORT (CONSTANTS.TS)</h3>
+                             <button onClick={() => setShowExportModal(false)} className="text-stone-400 hover:text-white">✕</button>
+                         </div>
+                         <div className="flex-1 p-4 overflow-hidden flex flex-col gap-4">
+                             <p className="text-sm text-stone-400">
+                                 Copy this JSON array and paste it into <code>constants.ts</code> under <code>BESTIARY_DATA</code> to sync your changes to the codebase.
+                             </p>
+                             <textarea 
+                                readOnly 
+                                className="flex-1 bg-black border border-stone-700 p-4 font-mono text-xs text-green-500 rounded resize-none focus:outline-none"
+                                value={JSON.stringify(creatures, null, 2)} 
+                             />
+                             <div className="flex justify-end gap-2">
+                                 <button 
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(JSON.stringify(creatures, null, 2));
+                                        showNotification("Copied to clipboard!");
+                                    }}
+                                    className="bg-emerald-700 hover:bg-emerald-600 text-white px-6 py-2 rounded text-sm font-bold"
+                                 >
+                                     COPY TO CLIPBOARD
+                                 </button>
+                             </div>
+                         </div>
+                    </div>
+                </div>
+            )}
+
             {showAssetPicker && (
                 <AssetPicker 
                     type={showAssetPicker.type}
@@ -442,6 +484,9 @@ const DataEditor: React.FC = () => {
                                 <div className="flex gap-2">
                                      <button onClick={() => gameState.resetData()} className="text-[#555] hover:text-red-500 px-3 py-2 text-xs uppercase font-bold">
                                         Reset All
+                                    </button>
+                                     <button onClick={handleExport} className="bg-stone-700 hover:bg-stone-600 text-white px-3 py-2 rounded text-sm font-bold border border-stone-600">
+                                        EXPORT CODE
                                     </button>
                                     <button onClick={handleSave} className="bg-emerald-700 hover:bg-emerald-600 text-white px-6 py-2 rounded text-sm font-bold shadow-lg shadow-emerald-900/20 transition-all">
                                         SAVE LOCAL

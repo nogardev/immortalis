@@ -1,3 +1,4 @@
+
 import { Creature, DamageType, Mission, PlayerStats, Weapon } from './types';
 import { ASSET_REGISTRY } from './game/asset_registry';
 
@@ -7,6 +8,17 @@ import { ASSET_REGISTRY } from './game/asset_registry';
 
 const REPO_PATH = 'nogardev/immortalis'; 
 const BRANCH = 'main';
+
+// ==========================================
+// CONFIGURAÇÃO DE DESENVOLVIMENTO
+// ==========================================
+
+/**
+ * Define se as ferramentas de Debug (Engine Tools e Chat AI) iniciam visíveis.
+ * FALSE = Modo Produção (Oculto, ative com o código 'immortalis')
+ * TRUE = Modo Desenvolvimento (Sempre visível)
+ */
+export const ENABLE_DEV_TOOLS = false;
 
 /**
  * Helper to determine asset mode without circular dependency on GameState
@@ -106,8 +118,9 @@ export const BESTIARY_DATA: Creature[] = [
     id: 'loira_banheiro',
     name: 'Loira do Banheiro',
     threatLevel: 1,
-    baseHp: 60,
-    baseDamage: 12,
+    baseHp: 500, // Updated: Boss level HP
+    baseDamage: 15,
+    maxPhases: 3,
     description: 'A psychological manifestation born from school urban legends. Manifests near mirrors.',
     behavior: 'Teleports behind the player when looked at directly for too long.',
     weaknesses: [DamageType.HOLY, DamageType.OCCULT],
