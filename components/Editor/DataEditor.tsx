@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gameState } from '../../services/gameState'; // Import GameState
 import { Creature, Weapon, PlayerConfig } from '../../types';
-import { resolveAssetPath } from '../../constants';
+import { resolveAssetPath, GITHUB_ASSET_BASE_URL } from '../../constants';
 import { getAllRegisteredAssets } from '../../game/asset_registry';
 
 // --- MOCK ASSET FILE SYSTEM ---
@@ -299,19 +299,39 @@ const DataEditor: React.FC = () => {
 
     // Helper to render preview image with error handling
     const PreviewImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
+        const [currentSrc, setCurrentSrc] = useState(resolveAssetPath(src));
         const [error, setError] = useState(false);
-        const resolvedSrc = resolveAssetPath(src);
+        const [fallbackTried, setFallbackTried] = useState(false);
 
+        // Update when prop changes
         useEffect(() => {
+            setCurrentSrc(resolveAssetPath(src));
             setError(false);
+            setFallbackTried(false);
         }, [src]);
+
+        const handleError = () => {
+            // Smart Fallback similar to Main Engine
+            if (!fallbackTried && !currentSrc.startsWith('http')) {
+                setFallbackTried(true);
+                let cleanPath = src;
+                if (cleanPath.startsWith('/')) cleanPath = cleanPath.slice(1);
+                if (cleanPath.startsWith('public/')) cleanPath = cleanPath.replace('public/', '');
+                
+                const githubUrl = `${GITHUB_ASSET_BASE_URL}${cleanPath}`;
+                console.log("Preview Image missing locally, trying GitHub:", githubUrl);
+                setCurrentSrc(githubUrl);
+            } else {
+                setError(true);
+            }
+        };
 
         if (error || !src) {
              return (
                  <div className={`${className} bg-red-900/50 flex flex-col items-center justify-center border border-red-500 text-red-500 text-center`}>
                      <span className="text-xl font-bold">!</span>
                      <span className="text-[8px] uppercase">Missing</span>
-                     <a href={resolvedSrc} target="_blank" rel="noopener noreferrer" className="text-[8px] underline text-blue-400 mt-1">Check URL</a>
+                     <a href={resolveAssetPath(src)} target="_blank" rel="noopener noreferrer" className="text-[8px] underline text-blue-400 mt-1">Check URL</a>
                  </div>
              );
         }
@@ -319,16 +339,16 @@ const DataEditor: React.FC = () => {
         return (
             <div className="relative group w-full h-full flex items-center justify-center">
                 <img 
-                    src={resolvedSrc} 
+                    src={currentSrc} 
                     alt={alt} 
                     className={className} 
-                    onError={() => setError(true)}
-                    title={`Source: ${src}\nResolved: ${resolvedSrc}`}
+                    onError={handleError}
+                    title={`Source: ${src}`}
                 />
                 {/* Debug Tooltip on Hover */}
                 <div className="absolute hidden group-hover:flex bottom-0 left-0 right-0 bg-black/80 text-[8px] text-white p-1 break-all flex-col z-50">
-                    <div>Res: {resolvedSrc}</div>
-                    <a href={resolvedSrc} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline font-bold mt-1">Open Original</a>
+                    <div>Res: {currentSrc}</div>
+                    <a href={currentSrc} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline font-bold mt-1">Open Original</a>
                 </div>
             </div>
         );

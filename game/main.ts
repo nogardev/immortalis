@@ -1,7 +1,7 @@
 import { eventBus, GameEvents } from '../services/eventBus';
 import { gameState } from '../services/gameState';
 import { Mission } from '../types';
-import { resolveAssetPath } from '../constants';
+import { resolveAssetPath, GITHUB_ASSET_BASE_URL } from '../constants';
 
 // --- ENGINE TYPES ---
 interface Point { x: number; y: number; }
@@ -398,6 +398,7 @@ export class ImmortalisEngine {
             // DRAW SPRITE
             if (e.spritePath) {
                 const img = this.getImage(e.spritePath);
+                // Draw if img is loaded and has dimensions
                 if (img && img.complete && img.naturalHeight !== 0) {
                     const drawX = e.x - (48 - e.width)/2; 
                     const drawY = e.y - (48 - e.height)/2;
@@ -408,12 +409,15 @@ export class ImmortalisEngine {
 
             // FALLBACK / RECT DRAW
             if (!drawn) {
+                // Determine if we should draw a "Missing Texture" block or just the simple rect
                 if (e.spritePath && this.brokenImages.has(e.spritePath)) {
+                    // Magenta Box for error
                     this.ctx.fillStyle = '#ff00ff'; 
                     this.ctx.globalAlpha = 0.5;
                     this.ctx.fillRect(e.x, e.y, e.width, e.height);
                     this.ctx.globalAlpha = 1.0;
                 } else {
+                    // Simple shape fallback
                     this.ctx.fillStyle = e.color;
                     if (e.type === 'PROJECTILE') {
                         this.ctx.beginPath();
@@ -495,7 +499,7 @@ export class ImmortalisEngine {
         this.ctx.restore();
     }
 
-    // --- UTILS ---
+    // --- ASSET LOADER WITH GITHUB FALLBACK ---
     private getImage(path: string): HTMLImageElement | null {
         // Use central resolver from constants
         const resolvedPath = resolveAssetPath(path);
@@ -504,6 +508,7 @@ export class ImmortalisEngine {
         const registry = window.GAME_BLOB_REGISTRY || {};
         const finalPath = registry[path] || resolvedPath;
 
+        // If we already know this image is absolutely broken, return null to trigger rect fallback
         if (this.brokenImages.has(finalPath)) {
             return null; 
         }
@@ -514,13 +519,40 @@ export class ImmortalisEngine {
 
         const img = new Image();
         img.crossOrigin = "Anonymous"; 
-        img.src = finalPath;
         
+        // --- SMART FALLBACK LOGIC ---
+        // If the local image fails (404 because file was wiped), try the GitHub version
         img.onerror = () => {
-            console.warn(`IMMORTALIS ENGINE: Asset Load Error: ${path} | Resolved: ${finalPath}`);
-            this.brokenImages.add(finalPath);
+            // Only attempt fallback if we aren't already trying an HTTP URL
+            // and if it was intended to be a local path
+            if (!finalPath.startsWith('http')) {
+                console.warn(`Local asset missing: ${finalPath}. Attempting automatic GitHub fallback...`);
+                
+                // Construct fallback URL: https://raw.github.../nogardev/immortalis/main/public/assets/...
+                // Normalize path to ensure no double slashes or missing public
+                let cleanPath = path;
+                if (cleanPath.startsWith('/')) cleanPath = cleanPath.slice(1);
+                if (cleanPath.startsWith('public/')) cleanPath = cleanPath.replace('public/', '');
+                
+                // Important: GITHUB_ASSET_BASE_URL already includes '/public/'
+                const fallbackUrl = `${GITHUB_ASSET_BASE_URL}${cleanPath}`;
+                
+                // Try loading the fallback
+                img.src = fallbackUrl;
+                
+                // If even the fallback fails, then it's truly broken
+                img.onerror = () => {
+                    console.error(`Asset failed on local AND GitHub: ${path}`);
+                    this.brokenImages.add(finalPath);
+                };
+            } else {
+                console.warn(`Failed to load external asset: ${finalPath}`);
+                this.brokenImages.add(finalPath);
+            }
         };
 
+        img.src = finalPath;
+        
         this.imageCache.set(finalPath, img);
         return img;
     }
