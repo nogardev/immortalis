@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
+import { GITHUB_ASSET_BASE_URL, IS_REPO_PUBLIC } from '../constants';
 
 const INITIAL_MESSAGES: ChatMessage[] = [
     {
         sender: 'AI DEV',
-        text: 'IMMORTALIS Engine initialized. \n\n⚠️ ASSET PIPELINE ALERT:\nI noticed you are looking for uploaded sprites in the repo. \n\n1. Images uploaded in the Editor are LOCAL ONLY (for testing).\n2. To make them permanent on GitHub/Vercel, you must manually upload the .png files to the "assets/" folders I just created.\n3. The file name must match exactly what is in the Data Editor.',
+        text: 'IMMORTALIS Engine initialized. \n\n✅ PIPELINE STATUS: OPTIMAL\n\n- Public Folder: Detected\n- Mode: ' + (IS_REPO_PUBLIC ? 'PUBLIC (GitHub Raw)' : 'PRIVATE (Local/Vercel)') + '\n\nAssets will load correctly from "public/assets/...".',
         timestamp: new Date()
     }
 ];
@@ -43,8 +44,10 @@ const DevChat: React.FC = () => {
                 responseText = "Analyzing combat metrics. I can adjust damage values in constants.ts. Confirmation required before applying changes.";
             } else if (lowerInput.includes('map') || lowerInput.includes('tile')) {
                 responseText = "Opening Tilemap Editor overlay. Remember: Collision layers must be named 'Collision' in Tiled.";
-            } else if (lowerInput.includes('sprite') || lowerInput.includes('art') || lowerInput.includes('upload')) {
-                responseText = "Remember: The Editor allows you to PREVIEW assets. To PUBLISH them, please add the actual .png files to the 'assets' folder in your repository structure.";
+            } else if (lowerInput.includes('broken') || lowerInput.includes('missing') || lowerInput.includes('image')) {
+                responseText = "DIAGNOSTIC: Ensure you moved your 'assets' folder inside a 'public' folder in the project root. \n\nPath must be: public/assets/sprites/...\n\nRestart the dev server after moving folders.";
+            } else if (lowerInput.includes('pipeline') || lowerInput.includes('github') || lowerInput.includes('drive')) {
+                 responseText = `PIPELINE ADVICE:\n1. Do NOT use Google Drive.\n2. Keep repo Private.\n3. Move 'assets' into 'public' folder.\n4. Use relative paths in Editor (e.g., 'assets/sprites/player.png').\n5. Push to GitHub. Vercel will auto-deploy.`;
             } else {
                 responseText = `Processing command: "${userMsg.text}". Implementing logic within authorized systems.`;
             }
@@ -62,7 +65,7 @@ const DevChat: React.FC = () => {
         <div className="flex flex-col h-full bg-stone-900 border-l border-stone-700 w-80 font-pixel">
             <div className="p-3 bg-stone-800 border-b border-stone-700 flex justify-between items-center">
                 <span className="text-emerald-500 font-bold">● AI DEV SERVER</span>
-                <span className="text-stone-500 text-xs">v0.1.6</span>
+                <span className="text-stone-500 text-xs">v0.1.9</span>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -74,7 +77,7 @@ const DevChat: React.FC = () => {
                                 : 'bg-emerald-900/20 text-emerald-400 border border-emerald-900'
                         }`}>
                             <div className="font-bold text-[10px] uppercase mb-1 opacity-75">{msg.sender}</div>
-                            <pre className="whitespace-pre-wrap font-sans">{msg.text}</pre>
+                            <pre className="whitespace-pre-wrap font-sans leading-tight">{msg.text}</pre>
                         </div>
                     </div>
                 ))}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { gameState } from '../services/gameState';
 import { Creature, DamageType } from '../types';
+import { GITHUB_ASSET_BASE_URL } from '../constants';
 
 const Bestiary: React.FC = () => {
     // Fetch dynamic data from GameState instead of static constants
@@ -67,6 +68,13 @@ const Bestiary: React.FC = () => {
                                         <img 
                                             src={resolveUrl(selectedCreature.illustrationPath)} 
                                             alt={selectedCreature.name} 
+                                            onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                // Try GitHub fallback if local failed and not already tried
+                                                if (!target.src.includes('raw.githubusercontent.com') && !selectedCreature.illustrationPath.startsWith('http')) {
+                                                    target.src = `${GITHUB_ASSET_BASE_URL}${selectedCreature.illustrationPath}`;
+                                                }
+                                            }}
                                             className="w-full h-full object-cover opacity-90" 
                                         />
                                     </div>

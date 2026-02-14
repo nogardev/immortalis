@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MISSIONS } from '../constants';
+import { MISSIONS, GITHUB_ASSET_BASE_URL } from '../constants';
 import { Mission } from '../types';
 import { gameState } from '../services/gameState';
 
@@ -62,6 +62,13 @@ const MissionBoard: React.FC<MissionBoardProps> = ({ onStartMission }) => {
                                             <img 
                                                 src={bossSprite} 
                                                 alt="Boss" 
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    // Try GitHub fallback
+                                                    if (!target.src.includes('raw.githubusercontent.com') && bossData && !bossData.spritePath.startsWith('http')) {
+                                                        target.src = `${GITHUB_ASSET_BASE_URL}${bossData.spritePath}`;
+                                                    }
+                                                }}
                                                 className="w-10 h-10 object-contain image-pixelated" 
                                             />
                                         ) : (

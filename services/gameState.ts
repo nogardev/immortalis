@@ -1,7 +1,8 @@
-import { BESTIARY_DATA, WEAPONS, INITIAL_PLAYER_STATS } from '../constants';
+import { BESTIARY_DATA, WEAPONS, INITIAL_PLAYER_STATS, GITHUB_ASSET_BASE_URL } from '../constants';
 import { Creature, Weapon, PlayerConfig } from '../types';
 
-const STORAGE_KEY = 'IMMORTALIS_GAME_STATE_V1';
+// Bump to V7: Reset state to clear out old hardcoded GitHub RAW URLs
+const STORAGE_KEY = 'IMMORTALIS_GAME_STATE_V7';
 
 class GameStateManager {
     private creatures: Creature[];
@@ -17,29 +18,53 @@ class GameStateManager {
                 const parsed = JSON.parse(savedState);
                 this.creatures = parsed.creatures || [...BESTIARY_DATA];
                 this.weapons = parsed.weapons || [...WEAPONS];
+                
+                // Ensure player config has a valid sprite path (fallback to constant if missing/broken)
                 this.playerConfig = parsed.playerConfig || {
-                    spritePath: 'assets/sprites/player/idle.png',
+                    spritePath: `assets/sprites/player/idle.png`,
                     baseStats: { ...INITIAL_PLAYER_STATS.attributes }
                 };
-                console.log('IMMORTALIS: State loaded from LocalStorage');
+
+                // CLEANUP: If the saved state contains the old raw.github URL, strip it out 
+                // so we can use the new relative path / external URL logic.
+                const cleanup = (path: string) => {
+                     if (path.includes('raw.githubusercontent.com')) {
+                         // Attempt to find the relative part
+                         const marker = '/main/';
+                         const idx = path.indexOf(marker);
+                         if (idx !== -1) {
+                             return path.substring(idx + marker.length);
+                         }
+                     }
+                     return path;
+                };
+
+                this.playerConfig.spritePath = cleanup(this.playerConfig.spritePath);
+                this.creatures.forEach(c => {
+                    c.spritePath = cleanup(c.spritePath);
+                    c.illustrationPath = cleanup(c.illustrationPath);
+                });
+                this.weapons.forEach(w => {
+                    w.spritePath = cleanup(w.spritePath);
+                });
+
+                console.log('IMMORTALIS: State loaded from LocalStorage (V7)');
             } catch (e) {
                 console.error('IMMORTALIS: Failed to parse save data, reverting to defaults', e);
-                this.creatures = [...BESTIARY_DATA];
-                this.weapons = [...WEAPONS];
-                this.playerConfig = {
-                    spritePath: 'assets/sprites/player/idle.png',
-                    baseStats: { ...INITIAL_PLAYER_STATS.attributes }
-                };
+                this.resetToDefaults();
             }
         } else {
-            // Default Initialization
-            this.creatures = [...BESTIARY_DATA];
-            this.weapons = [...WEAPONS];
-            this.playerConfig = {
-                spritePath: 'assets/sprites/player/idle.png',
-                baseStats: { ...INITIAL_PLAYER_STATS.attributes }
-            };
+            this.resetToDefaults();
         }
+    }
+
+    private resetToDefaults() {
+        this.creatures = [...BESTIARY_DATA];
+        this.weapons = [...WEAPONS];
+        this.playerConfig = {
+            spritePath: `assets/sprites/player/idle.png`,
+            baseStats: { ...INITIAL_PLAYER_STATS.attributes }
+        };
     }
 
     private save() {

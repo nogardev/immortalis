@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gameState } from '../../services/gameState'; // Import GameState
 import { Creature, Weapon, PlayerConfig } from '../../types';
+import { GITHUB_ASSET_BASE_URL, IS_REPO_PUBLIC } from '../../constants';
 
 // --- MOCK ASSET FILE SYSTEM ---
-// These are just defaults for the picker list, actual data comes from GameState
 const INITIAL_ASSETS = {
     sprites: [
         'assets/sprites/creatures/loira_idle.png',
@@ -40,10 +40,18 @@ interface AssetPickerProps {
 
 const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, onUpload, onClose, resolveUrl }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [customUrl, setCustomUrl] = useState('');
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             onUpload(e.target.files[0]);
+        }
+    };
+
+    const handleCustomUrlSubmit = () => {
+        if (customUrl.trim()) {
+            onSelect(customUrl.trim());
+            onClose();
         }
     };
 
@@ -53,9 +61,32 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                 <div className="p-4 border-b border-stone-700 flex justify-between items-center bg-[#2d2d2d]">
                     <div>
                         <h3 className="font-bold text-stone-200">Select {type === 'SPRITE' ? 'Sprite' : 'Illustration'} Asset</h3>
-                        <p className="text-[10px] text-stone-500">Local Assets & Imported Files</p>
+                        <div className="flex gap-2 items-center mt-1">
+                            <span className={`text-[9px] px-1.5 rounded uppercase font-bold border ${IS_REPO_PUBLIC ? 'border-blue-500 text-blue-400' : 'border-emerald-500 text-emerald-400'}`}>
+                                {IS_REPO_PUBLIC ? 'PUBLIC REPO MODE' : 'PRIVATE/LOCAL MODE'}
+                            </span>
+                        </div>
                     </div>
                     <button onClick={onClose} className="text-stone-400 hover:text-white px-2">✕</button>
+                </div>
+                
+                {/* External URL Input Section */}
+                <div className="p-4 bg-[#111] border-b border-stone-800 flex gap-2 items-center">
+                    <span className="text-xs font-bold text-stone-500 uppercase whitespace-nowrap">External URL:</span>
+                    <input 
+                        type="text" 
+                        value={customUrl}
+                        onChange={(e) => setCustomUrl(e.target.value)}
+                        placeholder="Paste link (Discord, Imgur, etc)"
+                        className="flex-1 bg-[#0a0a0a] border border-[#333] rounded px-3 py-1.5 text-xs text-stone-200 focus:border-emerald-500 focus:outline-none font-mono"
+                    />
+                    <button 
+                        onClick={handleCustomUrlSubmit}
+                        disabled={!customUrl}
+                        className="bg-stone-700 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors"
+                    >
+                        USE URL
+                    </button>
                 </div>
                 
                 <input 
@@ -67,18 +98,23 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                 />
 
                 <div className="p-4 overflow-y-auto grid grid-cols-5 gap-4 flex-1 content-start">
+                    {/* Upload Button */}
                     <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="group flex flex-col items-center gap-2 p-2 rounded bg-[#222] border-2 border-dashed border-stone-600 hover:border-emerald-500 hover:bg-[#2a2a2a] transition-all min-h-[120px] justify-center"
+                        className="group flex flex-col items-center gap-2 p-2 rounded bg-[#222] border-2 border-dashed border-stone-600 hover:border-emerald-500 hover:bg-[#2a2a2a] transition-all min-h-[120px] justify-center relative"
                     >
                         <div className="w-10 h-10 rounded-full bg-stone-800 flex items-center justify-center text-emerald-500 text-xl font-bold group-hover:scale-110 transition-transform">
                             +
                         </div>
                         <span className="text-[10px] text-stone-400 font-bold uppercase text-center">
-                            Import PNG<br/>(Persist Local)
+                            Upload Local<br/>(Preview Only)
                         </span>
+                         <div className="absolute top-1 right-1 bg-yellow-600 text-[8px] font-bold px-1 rounded text-black" title="Local only">
+                            LOCAL
+                        </div>
                     </button>
 
+                    {/* Asset List */}
                     {currentList.map((path, idx) => (
                         <button 
                             key={idx}
@@ -90,22 +126,31 @@ const AssetPicker: React.FC<AssetPickerProps> = ({ type, currentList, onSelect, 
                                 <img 
                                     src={resolveUrl(path)} 
                                     alt="asset" 
+                                    onError={(e) => {
+                                         const target = e.target as HTMLImageElement;
+                                         // If it fails, show broken icon
+                                         target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM1NSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIj48L2NpcmNsZT48bGluZSB4MT0iMTIiIHkxPSI4IiB4Mj0iMTIiIHkyPSIxMiI+PC9saW5lPjxsaW5lIHgxPSIxMiIgeTE9IjE2IiB4Mj0iMTIuMDEiIHkyPSIxNiI+PC9saW5lPjwvc3ZnPg==';
+                                    }}
                                     className="max-w-full max-h-full object-contain relative z-10 image-pixelated" 
                                 />
                             </div>
                             <span className="text-[10px] text-stone-400 break-all w-full text-center font-mono truncate px-1">
-                                {path.startsWith('data:') ? 'Local Asset' : path.split('/').pop()}
+                                {path.startsWith('data:') ? 'Local Asset' : (path.startsWith('http') ? 'External Link' : path.split('/').pop())}
                             </span>
-                            {path.startsWith('data:') && (
-                                <span className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full" title="Stored Locally"></span>
-                            )}
                         </button>
                     ))}
                 </div>
-                
-                <div className="p-2 bg-[#222] border-t border-[#333] text-[10px] text-stone-500 text-center font-mono">
-                   Images imported here are saved to your Browser's LocalStorage. They will persist on this machine only.
-                </div>
+
+                {!IS_REPO_PUBLIC && (
+                    <div className="p-2 bg-emerald-900/20 border-t border-emerald-900/50 text-[10px] text-emerald-300 text-center font-mono">
+                       ✅ SYSTEM READY: Using local 'public/assets' pipeline.
+                    </div>
+                )}
+                {IS_REPO_PUBLIC && (
+                    <div className="p-2 bg-orange-900/20 border-t border-orange-900/50 text-[10px] text-orange-300 text-center font-mono">
+                       ℹ️ PUBLIC MODE: Assets are loaded from GitHub Raw. Push your changes to 'main' to see them.
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -125,14 +170,13 @@ const DataEditor: React.FC = () => {
     const [selectedId, setSelectedId] = useState<string>('');
 
     const [assets, setAssets] = useState(INITIAL_ASSETS);
-    // Registry for current session base64 lookups if needed, though we store data: urls directly now
     const [showAssetPicker, setShowAssetPicker] = useState<null | { type: 'SPRITE' | 'ILLUSTRATION', field: string }>(null);
 
     // Sync from GameState when tab changes to ensure fresh data
     useEffect(() => {
         if (activeTab === 'CREATURES') {
             const currentCreatures = gameState.getCreatures();
-            setCreatures([...currentCreatures]); // Clone array to trigger re-render
+            setCreatures([...currentCreatures]); 
             setSelectedId(currentCreatures[0]?.id || '');
         } else if (activeTab === 'WEAPONS') {
             const currentWeapons = gameState.getWeapons();
@@ -191,7 +235,15 @@ const DataEditor: React.FC = () => {
     const resolveAssetUrl = (path: string) => {
         if (!path) return '';
         if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
-        return path;
+        
+        // Logic specific to Vercel/Local vs GitHub
+        if (IS_REPO_PUBLIC) {
+             const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+             return `${GITHUB_ASSET_BASE_URL}${cleanPath}`;
+        } else {
+            // Private mode: Ensure it starts with / for relative path from root
+            return path.startsWith('/') ? path : `/${path}`;
+        }
     };
 
     const handleFileUpload = (file: File) => {
@@ -216,6 +268,33 @@ const DataEditor: React.FC = () => {
             showNotification("Asset Imported & Encoded locally.", "success");
         };
         reader.readAsDataURL(file);
+    };
+
+    // Helper to render preview image with error handling
+    const PreviewImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
+        const [error, setError] = useState(false);
+        
+        useEffect(() => {
+            setError(false);
+        }, [src]);
+
+        if (error || !src) {
+             return (
+                 <div className={`${className} bg-red-900/50 flex flex-col items-center justify-center border border-red-500 text-red-500`}>
+                     <span className="text-xl font-bold">!</span>
+                     <span className="text-[8px] uppercase">Missing</span>
+                 </div>
+             );
+        }
+
+        return (
+            <img 
+                src={src} 
+                alt={alt} 
+                className={className} 
+                onError={() => setError(true)}
+            />
+        );
     };
 
     return (
@@ -331,7 +410,11 @@ const DataEditor: React.FC = () => {
                                 <div className="flex items-center gap-4 bg-[#222] p-2 rounded border border-[#333]">
                                     <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
                                          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
-                                        <img src={resolveAssetUrl(activeCreature.spritePath)} className="max-w-full max-h-full relative z-10 image-pixelated" alt="sprite" />
+                                         <PreviewImage 
+                                            src={resolveAssetUrl(activeCreature.spritePath)} 
+                                            alt="sprite" 
+                                            className="max-w-full max-h-full relative z-10 image-pixelated" 
+                                         />
                                     </div>
                                     <div className="flex-1 overflow-hidden">
                                         <div className="text-[10px] text-stone-500 uppercase">In-Game Sprite</div>
@@ -350,7 +433,11 @@ const DataEditor: React.FC = () => {
                                 {/* BESTIARY ILLUSTRATION PICKER */}
                                 <div className="flex items-center gap-4 bg-[#222] p-2 rounded border border-[#333]">
                                     <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
-                                        <img src={resolveAssetUrl(activeCreature.illustrationPath)} className="w-full h-full object-cover" alt="illustration" />
+                                        <PreviewImage 
+                                            src={resolveAssetUrl(activeCreature.illustrationPath)} 
+                                            alt="illustration" 
+                                            className="w-full h-full object-cover" 
+                                        />
                                     </div>
                                     <div className="flex-1 overflow-hidden">
                                         <div className="text-[10px] text-stone-500 uppercase">Bestiary Illustration</div>
@@ -387,7 +474,11 @@ const DataEditor: React.FC = () => {
                                 <div className="flex items-center gap-4 bg-[#222] p-2 rounded border border-[#333]">
                                     <div className="w-12 h-12 bg-black border border-[#444] rounded flex items-center justify-center shrink-0 relative overflow-hidden">
                                          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
-                                        <img src={resolveAssetUrl(playerConfig.spritePath)} className="max-w-full max-h-full relative z-10 image-pixelated" alt="sprite" />
+                                        <PreviewImage 
+                                            src={resolveAssetUrl(playerConfig.spritePath)} 
+                                            alt="sprite" 
+                                            className="max-w-full max-h-full relative z-10 image-pixelated" 
+                                         />
                                     </div>
                                     <div className="flex-1 overflow-hidden">
                                         <div className="text-[10px] text-stone-500 uppercase">Investigator Sprite (Top-Down)</div>
@@ -441,14 +532,24 @@ const DataEditor: React.FC = () => {
                             <div className="w-full bg-[#eaddcf] text-stone-900 rounded-sm shadow-2xl overflow-hidden border-4 border-stone-800 relative p-6">
                                 <div className="flex justify-center mb-6">
                                     <div className="w-32 h-32 border-4 border-stone-800 bg-black shadow-inner">
-                                        <img src={resolveAssetUrl(activeCreature.illustrationPath)} className="w-full h-full object-cover" />
+                                        <PreviewImage 
+                                            src={resolveAssetUrl(activeCreature.illustrationPath)} 
+                                            alt="illustration"
+                                            className="w-full h-full object-cover" 
+                                        />
                                     </div>
                                 </div>
                                 <h2 className="text-2xl font-serif font-bold text-center mb-1 border-b-2 border-stone-800 pb-2">{activeCreature.name}</h2>
                                 <div className="flex justify-center mt-4">
                                     <div className="flex flex-col items-center">
                                         <span className="text-[10px] uppercase font-bold text-stone-500 mb-1">In-Game Sprite</span>
-                                        <img src={resolveAssetUrl(activeCreature.spritePath)} className="w-12 h-12 image-pixelated" />
+                                        <div className="w-12 h-12">
+                                            <PreviewImage 
+                                                src={resolveAssetUrl(activeCreature.spritePath)} 
+                                                alt="sprite"
+                                                className="w-full h-full image-pixelated object-contain" 
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -457,7 +558,11 @@ const DataEditor: React.FC = () => {
                         {activeTab === 'PLAYER' && (
                              <div className="flex flex-col items-center gap-4">
                                 <div className="w-32 h-32 bg-[#1c1917] border border-stone-700 flex items-center justify-center">
-                                     <img src={resolveAssetUrl(playerConfig.spritePath)} className="w-16 h-16 image-pixelated" />
+                                     <PreviewImage 
+                                        src={resolveAssetUrl(playerConfig.spritePath)} 
+                                        alt="sprite"
+                                        className="w-16 h-16 image-pixelated" 
+                                     />
                                 </div>
                                 <div className="text-center text-stone-400">
                                     <p className="font-serif text-lg text-emerald-500">The Investigator</p>
