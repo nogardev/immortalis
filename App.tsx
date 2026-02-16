@@ -70,19 +70,21 @@ const App: React.FC = () => {
     switch (currentView) {
       case 'GAME':
         return (
-          <div className="flex-1 flex flex-col bg-stone-950 p-4">
+          <div className="flex-1 flex flex-col bg-[#000] p-4">
              <div className="flex-1 flex justify-center items-center relative">
-               <GameCanvas 
-                    key={activeMission?.id || 'game-canvas'} // Forces remount on mission change
-                    mission={activeMission}
-                    onGameOver={handleGameOver} 
-                    onMissionComplete={handleMissionComplete}
-               />
+               <div className="retro-border p-1 bg-[#111]">
+                   <GameCanvas 
+                        key={activeMission?.id || 'game-canvas'} // Forces remount on mission change
+                        mission={activeMission}
+                        onGameOver={handleGameOver} 
+                        onMissionComplete={handleMissionComplete}
+                   />
+               </div>
                
                {activeMission && (
-                 <div className="absolute top-4 left-4 bg-stone-900/80 border border-stone-700 p-2 rounded text-stone-200 pointer-events-none">
-                    <h3 className="text-xs uppercase text-stone-500">Current Objective</h3>
-                    <p className="font-serif font-bold">{activeMission.title}</p>
+                 <div className="absolute top-4 left-4 retro-border bg-[#000080] text-white px-4 py-2 pointer-events-none">
+                    <h3 className="text-[10px] uppercase text-[#ffff00] font-pixel mb-1">Current Objective</h3>
+                    <p className="font-serif text-lg leading-none">{activeMission.title}</p>
                  </div>
                )}
              </div>
@@ -106,37 +108,39 @@ const App: React.FC = () => {
       default:
         return (
           <div className="flex-1 flex flex-col items-center justify-center bg-stone-950 bg-[url('https://www.transparenttextures.com/patterns/black-felt.png')]">
-            <h1 className="text-8xl font-serif text-stone-200 mb-12 tracking-widest" style={{ textShadow: '0 0 10px rgba(200,0,0,0.5)' }}>IMMORTALIS</h1>
+            <h1 className="text-9xl font-pixel text-red-800 mb-8 tracking-widest drop-shadow-[4px_4px_0_rgba(255,255,255,0.2)]">
+                IMMORTALIS
+            </h1>
             
-            <div className="flex flex-col gap-4 w-64">
+            <div className="flex flex-col gap-6 w-72">
               <button 
                 onClick={() => setCurrentView('MISSIONS')}
-                className="bg-stone-800 hover:bg-red-900 border border-stone-600 text-stone-300 py-3 uppercase tracking-[0.2em] transition-all"
+                className="retro-btn bg-stone-800 text-stone-200 py-4 font-pixel text-2xl hover:bg-red-900 hover:text-white transition-colors"
               >
-                Start Hunt
+                START HUNT
               </button>
               <button 
                 onClick={() => setCurrentView('BESTIARY')}
-                className="bg-stone-800 hover:bg-stone-700 border border-stone-600 text-stone-300 py-3 uppercase tracking-[0.2em] transition-all"
+                className="retro-btn bg-stone-800 text-stone-200 py-4 font-pixel text-2xl hover:bg-stone-700 transition-colors"
               >
-                Bestiary
+                BESTIARY
               </button>
               
               {showEngineTools && (
                   <button 
                     onClick={() => setCurrentView('ENGINE')}
-                    className="bg-stone-900 border border-stone-800 text-stone-500 hover:text-emerald-500 py-3 uppercase tracking-[0.2em] transition-colors"
+                    className="retro-btn bg-[#003300] text-[#00ff00] border-[#00ff00] py-4 font-pixel text-2xl hover:bg-[#004400] transition-colors"
                   >
-                    Engine Tools
+                    DEBUG TOOLS
                   </button>
               )}
               
-              <button disabled className="bg-stone-900 border border-stone-800 text-stone-600 py-3 uppercase tracking-[0.2em] cursor-not-allowed">
-                Quit
+              <button disabled className="retro-btn bg-black text-stone-600 border-stone-800 py-4 font-pixel text-2xl cursor-not-allowed opacity-50">
+                QUIT
               </button>
             </div>
-            <div className="mt-12 text-xs text-stone-600 font-pixel">
-               BUILD: PROTOTYPE_0.1.7
+            <div className="mt-16 text-xs text-stone-600 font-pixel">
+               BUILD: PROTOTYPE_0.1.8
             </div>
           </div>
         );
@@ -144,51 +148,42 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-stone-950 text-stone-200 font-sans selection:bg-red-900 selection:text-white">
+    <div className="flex h-screen w-screen overflow-hidden bg-black text-stone-200 font-sans selection:bg-red-900 selection:text-white">
       {/* Sidebar: Navigation (Visible unless in Menu) */}
       {currentView !== 'MENU' && (
-         <div className="w-16 bg-stone-900 border-r border-stone-700 flex flex-col items-center py-4 gap-4 z-30">
+         <div className="w-20 bg-[#1c1917] border-r-4 border-[#292524] flex flex-col items-center py-4 gap-4 z-30 shadow-xl">
             <button 
               onClick={() => setCurrentView('MENU')}
-              className="w-10 h-10 flex items-center justify-center text-stone-500 hover:text-stone-200 hover:bg-stone-800 rounded"
+              className="w-12 h-12 retro-btn bg-stone-800 flex items-center justify-center text-stone-400 hover:text-white hover:bg-red-900"
               title="Main Menu"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
+              M
             </button>
-            <div className="h-px w-8 bg-stone-700 my-2"></div>
+            <div className="h-1 w-12 bg-[#292524]"></div>
             <button 
                onClick={() => setCurrentView('MISSIONS')}
-               className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${currentView === 'MISSIONS' ? 'bg-red-900 text-white' : 'text-stone-500 hover:bg-stone-800'}`}
+               className={`w-12 h-12 retro-btn flex items-center justify-center transition-colors ${currentView === 'MISSIONS' ? 'bg-[#8b0000] text-white border-white' : 'bg-stone-800 text-stone-500 hover:bg-stone-700'}`}
                title="Missions"
             >
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-               </svg>
+               Q
             </button>
             <button 
                onClick={() => setCurrentView('BESTIARY')}
-               className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${currentView === 'BESTIARY' ? 'bg-red-900 text-white' : 'text-stone-500 hover:bg-stone-800'}`}
+               className={`w-12 h-12 retro-btn flex items-center justify-center transition-colors ${currentView === 'BESTIARY' ? 'bg-[#8b0000] text-white border-white' : 'bg-stone-800 text-stone-500 hover:bg-stone-700'}`}
                title="Bestiary"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
+              B
             </button>
             
-            <div className="h-px w-8 bg-stone-700 my-2"></div>
+            <div className="h-1 w-12 bg-[#292524]"></div>
             
             {showEngineTools && (
                  <button 
                    onClick={() => setCurrentView('ENGINE')}
-                   className={`w-10 h-10 flex items-center justify-center rounded transition-colors ${currentView === 'ENGINE' ? 'bg-emerald-900 text-white' : 'text-emerald-700/50 hover:bg-stone-800 hover:text-emerald-500'}`}
+                   className={`w-12 h-12 retro-btn flex items-center justify-center transition-colors ${currentView === 'ENGINE' ? 'bg-[#004400] text-[#00ff00] border-[#00ff00]' : 'bg-black text-[#004400] border-[#004400] hover:text-[#00ff00]'}`}
                    title="Engine Tools"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+                  E
                 </button>
             )}
          </div>
@@ -207,7 +202,7 @@ const App: React.FC = () => {
 
       {/* Right Sidebar: AI DEV (Only visible if Tools Enabled) */}
       {showEngineTools && (
-        <div className="h-full border-l border-stone-800 z-40 shadow-xl transition-all duration-300">
+        <div className="h-full border-l-4 border-[#292524] z-40 shadow-xl transition-all duration-300">
             <DevChat />
         </div>
       )}

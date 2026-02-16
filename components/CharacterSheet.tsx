@@ -7,19 +7,19 @@ interface CharacterSheetProps {
 
 const CharacterSheet: React.FC<CharacterSheetProps> = ({ stats }) => {
     return (
-        <div className="bg-stone-800 border-b border-stone-700 p-4 flex items-center justify-between shadow-lg z-20 relative">
+        <div className="retro-border bg-stone-900 p-2 flex items-center justify-between z-20 relative mx-4 mt-4">
+            {/* Left: Name & Level */}
             <div className="flex items-center gap-4">
-                <div className="h-12 w-12 bg-stone-900 border border-stone-600 rounded-full flex items-center justify-center overflow-hidden">
-                    {/* Placeholder Avatar */}
-                    <div className="w-8 h-8 bg-stone-700 rounded-full"></div>
+                <div className="h-10 w-10 bg-[#000080] border-2 border-white flex items-center justify-center">
+                    <div className="w-6 h-6 bg-white rounded-full"></div> {/* Placeholder Face */}
                 </div>
                 <div>
-                    <h1 className="font-serif text-xl font-bold text-stone-200 leading-none">Investigator</h1>
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs bg-stone-700 px-1.5 py-0.5 rounded text-stone-300">LVL {stats.level}</span>
-                        <div className="w-32 h-2 bg-stone-900 rounded-full overflow-hidden">
+                    <h1 className="font-pixel text-2xl text-white leading-none tracking-widest drop-shadow-md">DETECTIVE</h1>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-pixel text-[#ffff00]">LV {stats.level}</span>
+                        <div className="w-24 h-2 bg-stone-800 border border-stone-600 relative">
                             <div 
-                                className="h-full bg-yellow-600" 
+                                className="h-full bg-[#ffff00]" 
                                 style={{ width: `${(stats.xp / stats.nextLevelXp) * 100}%` }}
                             ></div>
                         </div>
@@ -27,28 +27,29 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ stats }) => {
                 </div>
             </div>
 
-            <div className="flex gap-6 text-sm font-pixel">
+            {/* Middle: Stats Block */}
+            <div className="flex gap-8 text-lg font-pixel">
                 <div className="flex flex-col items-center">
-                    <span className="text-red-500 font-bold">{stats.attributes.hp}</span>
-                    <span className="text-stone-500 text-[10px] uppercase">HP</span>
+                    <span className="text-stone-400 text-[10px] leading-none mb-1">HP</span>
+                    <span className="text-white font-bold text-shadow">{stats.attributes.hp}</span>
                 </div>
                 <div className="flex flex-col items-center">
-                    <span className="text-green-500 font-bold">{stats.attributes.stamina}</span>
-                    <span className="text-stone-500 text-[10px] uppercase">STM</span>
+                    <span className="text-stone-400 text-[10px] leading-none mb-1">STM</span>
+                    <span className="text-white font-bold">{stats.attributes.stamina}</span>
                 </div>
                 <div className="flex flex-col items-center">
-                    <span className="text-stone-300 font-bold">{stats.attributes.baseDamage}</span>
-                    <span className="text-stone-500 text-[10px] uppercase">DMG</span>
+                    <span className="text-stone-400 text-[10px] leading-none mb-1">ATK</span>
+                    <span className="text-white font-bold">{stats.attributes.baseDamage}</span>
                 </div>
                 <div className="flex flex-col items-center">
-                    <span className="text-blue-400 font-bold">{stats.attributes.speed}</span>
-                    <span className="text-stone-500 text-[10px] uppercase">SPD</span>
+                    <span className="text-stone-400 text-[10px] leading-none mb-1">SPD</span>
+                    <span className="text-white font-bold">{stats.attributes.speed}</span>
                 </div>
             </div>
 
-            <div className="text-right">
-                <div className="text-xs text-stone-500 uppercase tracking-widest mb-1">Status</div>
-                <div className="text-emerald-500 font-bold text-sm">HEALTHY</div>
+            {/* Right: Status */}
+            <div className="bg-[#000080] border-2 border-white px-3 py-1">
+                <span className="font-pixel text-[#00ff00] animate-pulse">CONDITION: GOOD</span>
             </div>
         </div>
     );

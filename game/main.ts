@@ -229,7 +229,12 @@ export class ImmortalisEngine {
 
     private loop = (timestamp: number) => {
         if (!this.running) return;
-        const dt = (timestamp - this.lastTime) / 1000;
+        
+        // --- REAL TIME SCALE IMPLEMENTATION ---
+        const rawDt = (timestamp - this.lastTime) / 1000;
+        const runtime = gameState.getRuntimeConfig();
+        const dt = rawDt * runtime.timeScale; // APPLY MATRIX EFFECT
+        
         this.lastTime = timestamp;
 
         this.update(dt);
@@ -245,14 +250,27 @@ export class ImmortalisEngine {
         const playerConfig = gameState.getPlayerConfig();
         const speed = playerConfig.baseStats.speed;
 
-        this.player.vx = 0;
-        this.player.vy = 0;
-        if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) this.player.vy = -speed;
-        if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) this.player.vy = speed;
-        if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) this.player.vx = -speed;
-        if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) this.player.vx = speed;
+        // --- WASD CONTROL LOGIC & NORMALIZATION ---
+        let inputX = 0;
+        let inputY = 0;
+
+        if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) inputY -= 1;
+        if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) inputY += 1;
+        if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) inputX -= 1;
+        if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) inputX += 1;
+
+        // Normalize vector so diagonal movement isn't faster
+        if (inputX !== 0 || inputY !== 0) {
+            const length = Math.sqrt(inputX * inputX + inputY * inputY);
+            this.player.vx = (inputX / length) * speed;
+            this.player.vy = (inputY / length) * speed;
+        } else {
+            this.player.vx = 0;
+            this.player.vy = 0;
+        }
 
         const now = Date.now();
+        const runtime = gameState.getRuntimeConfig();
 
         // --- BOSS ENCOUNTER TRIGGER LOGIC ---
         // Room entrance is at Y=10. Player starts at Y=18.
@@ -535,55 +553,68 @@ export class ImmortalisEngine {
 
                     // 3. HANDLE MOVEMENT & ATTACKS (NEUTRAL STATE)
                     
-                    // Handle Active Dash Duration (from Phase 2 skill or Phase 3 mechanic)
-                    if (entity.dashDuration > 0 || entity.bossState === 'DASHING') {
-                        entity.dashDuration -= dt;
-                        entity.isDashing = true;
-                        
-                        // Dash deals damage if colliding
-                        if (this.checkEntityCollision(this.player, entity)) {
-                             this.damagePlayer((entity.damage || 10) * 1.5); // Dash hurts more
-                        }
-
-                        if (entity.dashDuration <= 0) {
-                            entity.bossState = 'NEUTRAL';
-                        }
-                    } 
-                    else {
-                        // STANDARD BEHAVIOR
-                        const phase = entity.phase || 1;
-
-                        // ABILITY: DASH (Phase 2 Only - Regular Cooldown)
-                        const dashCooldown = 4000;
-                        if (phase === 2 && now - entity.lastDashTime > dashCooldown && dist > 100 && dist < 400) {
-                             entity.lastDashTime = now;
-                             const speedMult = 500;
-                             entity.vx = (dx / dist) * speedMult;
-                             entity.vy = (dy / dist) * speedMult;
-                             entity.dashDuration = 0.3;
-                             this.triggerShake(0.1, 2);
-                        } 
-                        // ABILITY: SCREAM (Phase 1 & Phase 3 randomly)
-                        else if ((phase === 1 || phase === 3) && now - entity.lastSpecialTime > 5000 && dist < 250) {
-                            if (Math.random() < 0.02) { 
-                                entity.lastSpecialTime = now;
-                                entity.isScreaming = true;
-                                this.triggerShake(0.5, 10);
-                                this.damagePlayer(5); // Sonic damage?
-                                
-                                // Knockback Player with Anti-Tunneling
-                                this.applyPlayerKnockback(entity.x, entity.y, 120);
+                    // CRITICAL BUG FIX:
+                    // Only allow Neutral attacks (Dash/Scream) if the boss is NOT in a special Phase 3 state (Retreating/Hiding).
+                    const isBusy = ['RETREATING', 'HIDING', 'TELEGRAPH', 'WAITING', 'INTRO', 'SCREAMING_TRANSITION'].includes(entity.bossState!);
+                    
+                    if (!isBusy) {
+                        // Handle Active Dash Duration (from Phase 2 skill or Phase 3 mechanic)
+                        if (entity.dashDuration > 0 || entity.bossState === 'DASHING') {
+                            entity.dashDuration -= dt;
+                            entity.isDashing = true;
+                            
+                            // Dash deals damage if colliding
+                            if (this.checkEntityCollision(this.player, entity)) {
+                                this.damagePlayer((entity.damage || 10) * 1.5); // Dash hurts more
                             }
-                        }
-                        // STANDARD MOVEMENT
+
+                            if (entity.dashDuration <= 0) {
+                                entity.bossState = 'NEUTRAL';
+                            }
+                        } 
                         else {
-                            if (dist > 30) {
-                                const moveSpeed = phase === 3 ? 130 : 100;
-                                entity.vx = (dx / dist) * moveSpeed;
-                                entity.vy = (dy / dist) * moveSpeed;
-                            } else {
-                                entity.vx = 0;
-                                entity.vy = 0;
+                            // STANDARD BEHAVIOR
+                            const phase = entity.phase || 1;
+
+                            // ABILITY: DASH (Phase 2 Only - Regular Cooldown)
+                            // REAL TIME DIFFICULTY MODIFIER: Divide cooldown by difficultyMod (Higher mod = Lower cooldown)
+                            const dashCooldown = 4000 / runtime.difficultyMod;
+                            
+                            if (phase === 2 && now - entity.lastDashTime > dashCooldown && dist > 100 && dist < 400) {
+                                entity.lastDashTime = now;
+                                const speedMult = 500;
+                                entity.vx = (dx / dist) * speedMult;
+                                entity.vy = (dy / dist) * speedMult;
+                                entity.dashDuration = 0.3;
+                                this.triggerShake(0.1, 2);
+                            } 
+                            // ABILITY: SCREAM (Phase 1 & Phase 3 randomly)
+                            // REAL TIME DIFFICULTY: Increase scream chance based on difficulty
+                            else if ((phase === 1 || phase === 3) && now - entity.lastSpecialTime > 5000 && dist < 250) {
+                                const baseChance = 0.02;
+                                if (Math.random() < (baseChance * runtime.difficultyMod)) { 
+                                    entity.lastSpecialTime = now;
+                                    entity.isScreaming = true;
+                                    this.triggerShake(0.5, 10);
+                                    this.damagePlayer(5); // Sonic damage?
+                                    
+                                    // Knockback Player with Anti-Tunneling
+                                    this.applyPlayerKnockback(entity.x, entity.y, 120);
+                                }
+                            }
+                            // STANDARD MOVEMENT
+                            else {
+                                if (dist > 30) {
+                                    // REAL TIME DIFFICULTY: Boss moves faster
+                                    const baseSpeed = phase === 3 ? 130 : 100;
+                                    const moveSpeed = baseSpeed * runtime.difficultyMod;
+                                    
+                                    entity.vx = (dx / dist) * moveSpeed;
+                                    entity.vy = (dy / dist) * moveSpeed;
+                                } else {
+                                    entity.vx = 0;
+                                    entity.vy = 0;
+                                }
                             }
                         }
                     }
@@ -721,6 +752,10 @@ export class ImmortalisEngine {
     }
 
     private damagePlayer(amount: number) {
+        const runtime = gameState.getRuntimeConfig();
+        // GOD MODE CHECK
+        if (runtime.godMode) return;
+        
         const now = Date.now();
         // 1 second invulnerability
         if (this.player.lastDamageTime && now - this.player.lastDamageTime < 1000) {

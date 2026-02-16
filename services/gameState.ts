@@ -7,13 +7,29 @@ const STORAGE_KEY = 'IMMORTALIS_GAME_STATE_V8';
 
 type AssetSourceMode = 'LOCAL' | 'GITHUB';
 
+// NEW: Runtime configuration that isn't saved to disk, but lives in memory for DevTools
+export interface RuntimeConfig {
+    timeScale: number;       // 1.0 = Normal, 0.5 = Matrix, 2.0 = Turbo
+    difficultyMod: number;   // 1.0 = Normal, 2.0 = Boss attacks twice as fast
+    godMode: boolean;        // Player takes no damage
+}
+
 class GameStateManager {
     private creatures: Creature[];
     private weapons: Weapon[];
     private playerConfig: PlayerConfig;
     private assetSourceMode: AssetSourceMode;
+    
+    // Runtime only
+    private runtimeConfig: RuntimeConfig;
 
     constructor() {
+        this.runtimeConfig = {
+            timeScale: 1.0,
+            difficultyMod: 1.0,
+            godMode: false
+        };
+
         // Try to load from LocalStorage
         const savedState = localStorage.getItem(STORAGE_KEY);
         
@@ -95,6 +111,13 @@ class GameStateManager {
         this.save();
         // Force reload to apply constant changes effectively
         window.location.reload(); 
+    }
+
+    // Runtime Config (DevTools)
+    getRuntimeConfig() { return this.runtimeConfig; }
+    updateRuntimeConfig(updates: Partial<RuntimeConfig>) {
+        this.runtimeConfig = { ...this.runtimeConfig, ...updates };
+        console.log("Runtime Config Updated:", this.runtimeConfig);
     }
 
     // Creatures

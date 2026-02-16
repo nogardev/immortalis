@@ -13,6 +13,7 @@
         color: #e7e5e4; /* stone-200 */
         font-family: 'Crimson Text', serif;
         overflow: hidden;
+        image-rendering: pixelated;
       }
       
       .font-pixel {
@@ -24,6 +25,50 @@
         image-rendering: pixelated; 
         image-rendering: -moz-crisp-edges;
         image-rendering: crisp-edges;
+      }
+
+      /* Retro Scrollbar */
+      ::-webkit-scrollbar {
+        width: 12px;
+        background: #1c1917;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0c0a09; 
+        border-left: 1px solid #292524;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #44403c; 
+        border: 2px solid #1c1917;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #57534e; 
+      }
+
+      /* Retro Selection */
+      ::selection {
+        background: #7f1d1d; /* Red-900 */
+        color: #fff;
+      }
+
+      /* Utilities for SNES/Retro Borders */
+      .retro-border {
+        border: 4px solid #292524;
+        box-shadow: 
+          inset 2px 2px 0px 0px #44403c,
+          inset -2px -2px 0px 0px #0c0a09;
+      }
+
+      .retro-btn {
+        border: 2px solid #000;
+        box-shadow: 
+          inset 2px 2px 0px 0px rgba(255,255,255,0.1),
+          inset -2px -2px 0px 0px rgba(0,0,0,0.5);
+      }
+      .retro-btn:active {
+        box-shadow: 
+          inset 2px 2px 0px 0px rgba(0,0,0,0.5),
+          inset -2px -2px 0px 0px rgba(255,255,255,0.1);
+        transform: translateY(2px);
       }
     </style>
   <script type="importmap">

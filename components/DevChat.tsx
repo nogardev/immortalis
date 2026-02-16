@@ -7,7 +7,7 @@ import { eventBus, GameEvents } from '../services/eventBus';
 const INITIAL_MESSAGES: ChatMessage[] = [
     {
         sender: 'AI DEV',
-        text: 'IMMORTALIS Engine initialized. \n\n✅ MODE: ' + (IS_REPO_PUBLIC ? 'PUBLIC (GitHub Raw)' : 'PRIVATE (Local)') + '\n\nI can now modify game parameters in real-time. Try commands like:\n- "Set Loira HP to 1000"\n- "Set Loira Phases to 3"\n- "Unlock all"',
+        text: 'IMMORTALIS Engine initialized. \n\n✅ MODE: ' + (IS_REPO_PUBLIC ? 'PUBLIC (GitHub Raw)' : 'PRIVATE (Local)') + '\n\nI can now modify game parameters in real-time. Try commands like:\n- "Set Loira HP to 1000"\n- "Make the game faster"\n- "Enable God Mode"',
         timestamp: new Date()
     }
 ];
@@ -77,6 +77,39 @@ const DevChat: React.FC = () => {
             }
         }
 
+        // --- RUNTIME TWEAKS (Game Speed, Difficulty) ---
+        // These actually change the running game engine variables now!
+        
+        if (cmd.includes('faster') || cmd.includes('speed up game')) {
+            gameState.updateRuntimeConfig({ timeScale: 1.5 });
+            return "RUNTIME OVERRIDE: Game Time Scale set to 150% (Turbo Mode).";
+        }
+
+        if (cmd.includes('slower') || cmd.includes('slow motion') || cmd.includes('slow down')) {
+            gameState.updateRuntimeConfig({ timeScale: 0.5 });
+            return "RUNTIME OVERRIDE: Game Time Scale set to 50% (Matrix Mode).";
+        }
+
+        if (cmd.includes('normal speed') || cmd.includes('reset speed')) {
+            gameState.updateRuntimeConfig({ timeScale: 1.0 });
+            return "RUNTIME OVERRIDE: Game Time Scale reset to 100%.";
+        }
+
+        if (cmd.includes('harder') || cmd.includes('aggressive') || cmd.includes('difficult')) {
+            gameState.updateRuntimeConfig({ difficultyMod: 2.0 });
+            return "AI LOGIC PATCH: Boss Aggression Multiplier set to 2.0x. Good luck.";
+        }
+
+        if (cmd.includes('easier') || cmd.includes('easy mode') || cmd.includes('calm down')) {
+            gameState.updateRuntimeConfig({ difficultyMod: 0.5 });
+            return "AI LOGIC PATCH: Boss Aggression Multiplier set to 0.5x. Enemies are lethargic.";
+        }
+
+        if (cmd.includes('god mode') || cmd.includes('invincible')) {
+             gameState.updateRuntimeConfig({ godMode: true });
+             return "CHEAT CODE ACCEPTED: IDDQD. Player damage disabled.";
+        }
+
         // --- COMMAND: UNLOCK ALL ---
         if (cmd.includes('unlock all') || cmd.includes('reveal bestiary')) {
             const creatures = gameState.getCreatures();
@@ -111,12 +144,21 @@ const DevChat: React.FC = () => {
             return "ENGINE ACTION: Player Health restored.";
         }
 
-        // --- EXPLANATION FOR LOGIC ---
-        if (cmd.includes('mechanic') || cmd.includes('code') || cmd.includes('script')) {
-            return "SYSTEM NOTICE: I can modify NUMERICAL PARAMETERS (HP, Speed, Phases) and DATA structures.\n\nI cannot write new Typescript logic (like new movement patterns) in runtime. \n\nHowever, I have enabled the 'maxPhases' parameter in the database, so you can now change how many phases a boss has by typing 'Set Loira phases to 3'.";
+        // --- NATURAL LANGUAGE / BUG REPORT HANDLING (SIMULATION FALLBACK) ---
+        // If it's something complex we can't handle via runtime tweaks (like "Fix the wall collision bug")
+        const isBugReport = cmd.length > 20 || 
+                           cmd.includes('bug') || 
+                           cmd.includes('glitch') || 
+                           cmd.includes('fix') || 
+                           cmd.includes('change') || 
+                           cmd.includes('adjust') ||
+                           cmd.includes('behavior');
+
+        if (isBugReport) {
+            return `SYSTEM MESSAGE: \nI can modify variables (Speed, HP, Aggression) in real-time, but I cannot rewrite source code files (main.ts) from inside the browser sandbox.\n\nTo permanently fix code logic or bugs, please ask the EXTERNAL AI (Chat Window) to apply a patch.`;
         }
 
-        return `Unknown command "${text}". \nTry: "Set Loira HP 500", "Spawn Werewolf", "Heal Player".`;
+        return `Unknown command "${text}". \nTry: "Make it faster", "Make boss aggressive", "Set Loira HP 500".`;
     };
 
     const handleSend = () => {
@@ -148,7 +190,7 @@ const DevChat: React.FC = () => {
         <div className="flex flex-col h-full bg-stone-900 border-l border-stone-700 w-80 font-pixel">
             <div className="p-3 bg-stone-800 border-b border-stone-700 flex justify-between items-center">
                 <span className="text-emerald-500 font-bold">● AI DEV SERVER</span>
-                <span className="text-stone-500 text-xs">v0.2.0 (CONNECTED)</span>
+                <span className="text-stone-500 text-xs">v0.2.2 (RUNTIME ACCESS)</span>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -174,7 +216,7 @@ const DevChat: React.FC = () => {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder="Ex: Set Loira HP 500"
+                        placeholder="Ex: Make it harder"
                         className="flex-1 bg-stone-950 border border-stone-600 rounded px-2 py-1 text-sm focus:outline-none focus:border-emerald-500 text-stone-200 placeholder-stone-600"
                     />
                     <button 
